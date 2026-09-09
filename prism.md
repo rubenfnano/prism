@@ -71,11 +71,26 @@ Reúne aquí cada respuesta que falte, para que ningún paso posterior tenga que
 
    Una bóveda nueva se crea directamente en la carpeta personal de la persona, junto a la carpeta del asistente (nunca dentro). En cuanto exista, di la ruta completa en voz alta.
 
-<!-- A partir de aquí, pendiente de las piezas reales:
-- Preguntas de voz (motor, tecla de activación, modo manos libres/pulsar-para-hablar)
-  una vez se decida si es pieza propia o backtalk sin modificar.
-- Preguntas de cara (elegir entre las caras propias de Rubén, cuando existan).
-- Permisos: si el asistente pide confirmación antes de actuar, o actúa sin preguntar.
+<!--
+DECIDIDO (2026-09-09): la voz se apoya en `backtalk` de terceros, SIN MODIFICAR
+(clonado tal cual, como cualquier otra dependencia externa — no es un fork, no
+arrastra su licencia a este proyecto). Motores disponibles: Kokoro (integrado,
+gratis, offline) o ElevenLabs (cuenta propia, voz natural).
+
+VoiceStudio (debpalash/VoiceStudio, AGPL-3.0) NO se integra como motor en vivo —
+eso exigiría parchear `backtalk/mouth.py` (el motor no es enchufable por config,
+la URL de ElevenLabs está fija en el código) y volvería a meter un fork de por
+medio. En su lugar: herramienta APARTE, offline, para diseñar/clonar una voz
+propia; el resultado se sube a ElevenLabs como voz personalizada. No corre
+nunca en la conversación real, así que no hay dependencia de su AGPL en tiempo
+de ejecución.
+
+Pendiente aún, y sí entra en esta Fase 2 cuando se escriba:
+4. Preguntas de voz — motor (Kokoro/ElevenLabs), tecla de activación o modo
+   manos libres. Mismo tipo de preguntas que ya resuelve el wizard propio de
+   backtalk (backtalk.md); aquí solo se recogen antes para no repetirlas.
+5. Preguntas de cara — elegir entre las caras propias de Rubén, cuando existan.
+6. Permisos — si el asistente pide confirmación antes de actuar, o actúa sin preguntar.
 -->
 
 ## Fase 3: Instalar las piezas
