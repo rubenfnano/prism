@@ -21,24 +21,29 @@ a:hover { color: #ff7be2; }
   <div style="flex-shrink: 0; display: flex; justify-content: center; padding: 18px 20px; border-bottom: 1px solid rgba(120,200,235,0.1);">
   <div style="display: inline-flex; align-items: stretch; gap: 2px; padding: 4px; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.14); border-radius: 4px;">
     <button onClick="{{ goListening }}" style="appearance: none; cursor: pointer; background: rgba(47,243,255, calc({{ actListening }} * 0.09)); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
-      <span>listening</span>
+      <span ref="{{ setLabelListening }}">listening</span>
       <span style="width: 100%; height: 2px; background: #2ff3ff; box-shadow: 0 0 8px #2ff3ff; opacity: {{ actListening }};"></span>
     </button>
     <button onClick="{{ goThinking }}" style="appearance: none; cursor: pointer; background: rgba(139,107,255, calc({{ actThinking }} * 0.09)); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
-      <span>thinking</span>
+      <span ref="{{ setLabelThinking }}">thinking</span>
       <span style="width: 100%; height: 2px; background: #b06bff; box-shadow: 0 0 8px #b06bff; opacity: {{ actThinking }};"></span>
     </button>
     <button onClick="{{ goSpeaking }}" style="appearance: none; cursor: pointer; background: rgba(255,79,216, calc({{ actSpeaking }} * 0.09)); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
-      <span>speaking</span>
+      <span ref="{{ setLabelSpeaking }}">speaking</span>
       <span style="width: 100%; height: 2px; background: #ff4fd8; box-shadow: 0 0 8px #ff4fd8; opacity: {{ actSpeaking }};"></span>
     </button>
     <button onClick="{{ goRest }}" style="appearance: none; cursor: pointer; background: rgba(139,107,255, calc({{ actRest }} * 0.09)); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
-      <span>rest</span>
+      <span ref="{{ setLabelRest }}">rest</span>
       <span style="width: 100%; height: 2px; background: #8b6bff; box-shadow: 0 0 8px #8b6bff; opacity: {{ actRest }};"></span>
     </button>
     <div style="width: 1px; align-self: center; height: 22px; background: rgba(120,200,235,0.18); margin: 0 2px;"></div>
+    <button ref="{{ setLiveBtn }}" onClick="{{ toggleLive }}" style="appearance: none; cursor: pointer; background: rgba(255,255,255,0.025); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
+      <span ref="{{ setLabelLive }}">live</span>
+      <span ref="{{ setLiveBar }}" style="width: 100%; height: 2px; background: #ff6f6f; box-shadow: 0 0 8px #ff6f6f; opacity: 0.12;"></span>
+    </button>
+    <div style="width: 1px; align-self: center; height: 22px; background: rgba(120,200,235,0.18); margin: 0 2px;"></div>
     <button onClick="{{ toggleChat }}" style="appearance: none; cursor: pointer; background: rgba(47,243,255, calc({{ actChat }} * 0.09)); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
-      <span>chat</span>
+      <span ref="{{ setLabelChat }}">chat</span>
       <span style="width: 100%; height: 2px; background: #2ff3ff; box-shadow: 0 0 8px #2ff3ff; opacity: {{ actChat }};"></span>
     </button>
   </div>
@@ -49,7 +54,7 @@ a:hover { color: #ff7be2; }
   </div>
   <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
     <div style="font-size: 26px; font-weight: 300; letter-spacing: 0.46em; text-indent: 0.46em; color: #dcecf6;">PRISM</div>
-    <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.34em; text-indent: 0.34em; color: rgba(150,175,200,0.55); text-transform: uppercase;">personal ai assistant</div>
+    <div ref="{{ setSubtitle }}" style="font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.34em; text-indent: 0.34em; color: rgba(150,175,200,0.55); text-transform: uppercase;">personal ai assistant</div>
   </div>
   <div ref="{{ setChatPanel }}" style="display: none; width: min(100%, 460px); flex-direction: column; gap: 10px; background: rgba(10,13,22,0.7); border: 1px solid rgba(120,200,235,0.16); border-radius: 4px; padding: 14px; backdrop-filter: blur(6px);">
     <div ref="{{ setMessagesEl }}" style="display: flex; flex-direction: column; gap: 10px; max-height: 260px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.55;"></div>
@@ -62,22 +67,88 @@ a:hover { color: #ff7be2; }
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;autoCycle&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;rotationSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.45,&quot;min&quot;:0,&quot;max&quot;:1.6,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;glow&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0,&quot;max&quot;:2,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Look&quot;}}">
+// ---- i18n: detected once from the browser/OS language, not hardcoded.
+// Add a language by adding one more key here — nothing else to touch.
+const LANG = (((navigator.languages && navigator.languages[0]) || navigator.language || 'en') + '').toLowerCase().startsWith('es') ? 'es' : 'en';
+const STR = {
+  en: {
+    listening: 'listening', thinking: 'thinking', speaking: 'speaking', rest: 'rest',
+    live: 'live', chat: 'chat', subtitle: 'personal ai assistant', placeholder: 'Message your assistant...',
+    seedUser: "Fix the mobile menu, there's no way to navigate",
+    seedReply: 'Confirmed and fixed — added a hamburger button on mobile.',
+    replyMenu: 'Fixed — the menu had no button on mobile. Added a hamburger that opens the same links.',
+    replyDefault: 'Got it. Want me to do it now, or would you like to review it first?',
+  },
+  es: {
+    listening: 'escuchando', thinking: 'pensando', speaking: 'hablando', rest: 'reposo',
+    live: 'en vivo', chat: 'chat', subtitle: 'asistente de ia personal', placeholder: 'Escribe a tu asistente...',
+    seedUser: 'Arregla el menú móvil, no hay forma de navegar',
+    seedReply: 'Confirmado y arreglado — añadido un botón de hamburguesa en móvil.',
+    replyMenu: 'Arreglado — el menú no tenía botón en móvil. Añadí una hamburguesa que despliega los mismos enlaces.',
+    replyDefault: 'Anotado. ¿Lo hago ya, o lo revisas primero?',
+  },
+};
+const T = STR[LANG];
+
 class Component extends DCLogic {
   state = { mode: 'rest', chatOpen: false };
 
   constructor(props) {
     super(props);
+    // ---- i18n: each ref sets its own text the moment it mounts, so mount
+    // order never matters and nothing renders untranslated even briefly.
+    this.setLabelListening = (el) => { if (el) el.textContent = T.listening; };
+    this.setLabelThinking = (el) => { if (el) el.textContent = T.thinking; };
+    this.setLabelSpeaking = (el) => { if (el) el.textContent = T.speaking; };
+    this.setLabelRest = (el) => { if (el) el.textContent = T.rest; };
+    this.setLabelChat = (el) => { if (el) el.textContent = T.chat; };
+    this.setLabelLive = (el) => { if (el) el.textContent = T.live; };
+    this.setSubtitle = (el) => { if (el) el.textContent = T.subtitle; };
+
+    // ---- "live" conversation: a real toggle, distinct from the manual
+    // state buttons and from `autoCycle` (that one is only an idle-demo
+    // loop). While on, it drives the same three states continuously —
+    // listen, think, speak, repeat — the way a live voice call would.
+    this.liveActive = false;
+    this.liveTimer = null;
+    this.setLiveBtn = (el) => { this.liveBtnEl = el; };
+    this.setLiveBar = (el) => { this.liveBarEl = el; };
+    this.liveCycle = () => {
+      this.pick('listening');
+      this.liveTimer = setTimeout(() => {
+        this.pick('thinking');
+        this.liveTimer = setTimeout(() => {
+          this.pick('speaking');
+          this.liveTimer = setTimeout(() => { if (this.liveActive) this.liveCycle(); }, 2000);
+        }, 800);
+      }, 2600);
+    };
+    this.toggleLive = () => {
+      this.liveActive = !this.liveActive;
+      if (this.liveBtnEl) {
+        this.liveBtnEl.style.background = this.liveActive ? 'rgba(255,111,111,0.14)' : 'rgba(255,255,255,0.025)';
+      }
+      if (this.liveBarEl) this.liveBarEl.style.opacity = this.liveActive ? '1' : '0.12';
+      if (this.liveActive) {
+        clearTimeout(this.pttTimer);
+        this.liveCycle();
+      } else {
+        clearTimeout(this.liveTimer);
+        this.pick('rest');
+      }
+    };
     this.setCanvas = (el) => { this.canvasEl = el; if (el) this.boot(); };
-    this.goListening = () => this.pick('listening');
-    this.goThinking = () => this.pick('thinking');
-    this.goSpeaking = () => this.pick('speaking');
-    this.goRest = () => this.pick('rest');
+    this.stopLiveIfActive = () => { if (this.liveActive) this.toggleLive(); };
+    this.goListening = () => { this.stopLiveIfActive(); this.pick('listening'); };
+    this.goThinking = () => { this.stopLiveIfActive(); this.pick('thinking'); };
+    this.goSpeaking = () => { this.stopLiveIfActive(); this.pick('speaking'); };
+    this.goRest = () => { this.stopLiveIfActive(); this.pick('rest'); };
 
     // ---- chat: just a toggle + a plain-DOM message list, wired through
     // refs like the canvas already is. Doesn't touch the visualizer above.
     this.setChatPanel = (el) => { this.chatPanelEl = el; };
     this.setMessagesEl = (el) => { this.messagesEl = el; if (el && !this.seeded) { this.seeded = true; this.seedChat(); } };
-    this.setTextInput = (el) => { this.textInputEl = el; };
+    this.setTextInput = (el) => { this.textInputEl = el; if (el) el.placeholder = T.placeholder; };
     this.toggleChat = () => {
       const open = !this.state.chatOpen;
       this.setState({ chatOpen: open });
@@ -106,6 +177,7 @@ class Component extends DCLogic {
       const tag = document.activeElement && document.activeElement.tagName;
       if (tag === 'TEXTAREA' || tag === 'INPUT') return;
       e.preventDefault();
+      this.stopLiveIfActive();
       clearTimeout(this.pttTimer);
       this.pick('listening');
     };
@@ -178,23 +250,23 @@ class Component extends DCLogic {
   respondTo(text) {
     setTimeout(() => {
       const lower = text.toLowerCase();
-      if (lower.includes('menu') || lower.includes('menú') || lower.includes('móvil')) {
-        this.addMessage('assistant', 'Arreglado — el menú no tenía botón en móvil. Añadí una hamburguesa que despliega los mismos enlaces.', {
+      if (lower.includes('menu') || lower.includes('menú') || lower.includes('móvil') || lower.includes('mobile')) {
+        this.addMessage('assistant', T.replyMenu, {
           file: 'NavBar.tsx', added: 9, removed: 1,
           diff: '<span style="color:#767d98;">  export default function NavBar() {</span>\n' +
                 '<span style="color:#a9f2e6;">+   const [open, setOpen] = useState(false);</span>\n' +
                 '<span style="color:#767d98;">    return (</span>',
         });
       } else {
-        this.addMessage('assistant', 'Anotado. ¿Lo hago ya, o lo revisas primero?');
+        this.addMessage('assistant', T.replyDefault);
       }
       this.pick('rest');
     }, 900);
   }
 
   seedChat() {
-    this.addMessage('user', 'Arregla el menú móvil, no hay forma de navegar');
-    this.addMessage('assistant', 'Confirmado y arreglado — añadido un botón de hamburguesa en móvil.', {
+    this.addMessage('user', T.seedUser);
+    this.addMessage('assistant', T.seedReply, {
       file: 'NavBar.tsx', added: 9, removed: 1,
       diff: '<span style="color:#a9f2e6;">+   const [open, setOpen] = useState(false);</span>',
     });
@@ -219,7 +291,17 @@ class Component extends DCLogic {
       setTextInput: this.setTextInput,
       toggleChat: this.toggleChat,
       sendMessage: this.sendMessage,
-      handleKey: this.handleKey
+      handleKey: this.handleKey,
+      setLabelListening: this.setLabelListening,
+      setLabelThinking: this.setLabelThinking,
+      setLabelSpeaking: this.setLabelSpeaking,
+      setLabelRest: this.setLabelRest,
+      setLabelChat: this.setLabelChat,
+      setLabelLive: this.setLabelLive,
+      setSubtitle: this.setSubtitle,
+      setLiveBtn: this.setLiveBtn,
+      setLiveBar: this.setLiveBar,
+      toggleLive: this.toggleLive
     };
   }
 
@@ -227,6 +309,7 @@ class Component extends DCLogic {
     this.dead = true;
     if (this.raf) cancelAnimationFrame(this.raf);
     if (this.ro) this.ro.disconnect();
+    clearTimeout(this.liveTimer);
     window.removeEventListener('keydown', this.onGlobalKeyDown);
     window.removeEventListener('keyup', this.onGlobalKeyUp);
     clearTimeout(this.pttTimer);
