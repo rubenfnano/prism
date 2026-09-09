@@ -72,23 +72,43 @@ Reúne aquí cada respuesta que falte, para que ningún paso posterior tenga que
    Una bóveda nueva se crea directamente en la carpeta personal de la persona, junto a la carpeta del asistente (nunca dentro). En cuanto exista, di la ruta completa en voz alta.
 
 <!--
-DECIDIDO (2026-09-09): la voz se apoya en `backtalk` de terceros, SIN MODIFICAR
-(clonado tal cual, como cualquier otra dependencia externa — no es un fork, no
-arrastra su licencia a este proyecto). Motores disponibles: Kokoro (integrado,
-gratis, offline) o ElevenLabs (cuenta propia, voz natural).
+DECIDIDO (2026-09-09), revisado: nada de `backtalk` de Jared, ni siquiera sin
+modificar — depender de su código, aunque no contamine la licencia de PRISM,
+no libera de verdad a quien lo instale. La pieza de voz de PRISM es CÓDIGO
+PROPIO, escrito desde cero, apoyado directamente en los motores de
+reconocimiento/síntesis de voz (esos sí son de terceros con licencia permisiva,
+nunca de Jared): captura de audio, tecla de activación, conexión con Claude
+Code — todo eso lo escribe PRISM, no Jared.
 
-VoiceStudio (debpalash/VoiceStudio, AGPL-3.0) NO se integra como motor en vivo —
-eso exigiría parchear `backtalk/mouth.py` (el motor no es enchufable por config,
-la URL de ElevenLabs está fija en el código) y volvería a meter un fork de por
-medio. En su lugar: herramienta APARTE, offline, para diseñar/clonar una voz
-propia; el resultado se sube a ElevenLabs como voz personalizada. No corre
-nunca en la conversación real, así que no hay dependencia de su AGPL en tiempo
-de ejecución.
+**Motores por defecto: Whisper (STT) + Kokoro (TTS).** Elegidos por ser los que
+ya están probados y funcionando de verdad en la máquina de Rubén — no una
+promesa de rendimiento sin verificar. Comparé Parakeet TDT v3 como alternativa
+más rápida (arquitectura transductor) y no hay ningún benchmark real en
+Raspberry Pi que lo respalde; los datos de RTFx que circulan son de Apple
+Silicon o servidores x86, no comparables. Queda como opción, no como default.
+
+**Decisión de arquitectura clave: el motor NO va hardcodeado.** A diferencia
+de `backtalk/mouth.py` (cada motor escrito a mano, sin punto de extensión),
+la capa de voz de PRISM define una interfaz de motor (STT y TTS por separado)
+para que quien instale PRISM pueda elegir el que quiera sin tocar el código
+base: Whisper/Kokoro por defecto, con Parakeet TDT, Chatterbox y ElevenLabs
+(cuenta propia) como alternativas ya contempladas desde el diseño. Es SU
+Jarvis — que se lo pueda hacer a su medida.
+
+**VoiceStudio** (debpalash/VoiceStudio, AGPL-3.0) sigue sin usarse como motor
+en vivo (evita meter su AGPL en el bucle de ejecución); su papel sigue siendo
+aparte, offline, como herramienta de diseño/clonado de voz cuyo resultado se
+puede subir a ElevenLabs o a cualquier motor que soporte clonación (Chatterbox
+también clona).
+
+**Verificación pendiente antes de fijar ningún motor "recomendado" en el
+instalador:** medir consumo real (RAM, CPU, latencia) de cada motor candidato
+en la propia Raspberry Pi de Rubén con `vcgencmd`/`htop`, no fiarse de cifras
+de marketing de otro hardware.
 
 Pendiente aún, y sí entra en esta Fase 2 cuando se escriba:
-4. Preguntas de voz — motor (Kokoro/ElevenLabs), tecla de activación o modo
-   manos libres. Mismo tipo de preguntas que ya resuelve el wizard propio de
-   backtalk (backtalk.md); aquí solo se recogen antes para no repetirlas.
+4. Preguntas de voz — qué motor de STT y de TTS (con Whisper+Kokoro como
+   respuesta fácil por defecto), tecla de activación o modo manos libres.
 5. Preguntas de cara — elegir entre las caras propias de Rubén, cuando existan.
 6. Permisos — si el asistente pide confirmación antes de actuar, o actúa sin preguntar.
 -->
