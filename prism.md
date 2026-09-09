@@ -52,18 +52,30 @@ Instalador Jarvis Propio de la bóveda). No avanzar aquí sin que Rubén confirm
 
 ## Fase 2: La entrevista
 
-<!--
-ESQUELETO A PROPÓSITO — Rubén quiere replantear él mismo el contenido de esta fase
-(qué se pregunta, en qué orden, con qué palabras). No inventar las preguntas aquí.
+<!-- BORRADOR (2026-09-09) — pendiente de que Rubén lo revise y corrija. Cubre solo
+las tres cosas que Fase 3 necesita sí o sí; falta lo de voz/cara hasta que esas
+piezas estén decididas. -->
 
-Lo que SÍ sabemos que tiene que decidirse en algún momento de esta fase, según la Fase 3:
-- Identidad del asistente (nombre, personalidad) — salvo que la Fase 0 ya haya adoptado una.
-- Bóveda de memoria: nueva o existente, y dónde.
-- Si se instalan voz/cara: sus propias preguntas de configuración (a definir cuando
-  esas piezas existan).
+Reúne aquí cada respuesta que falte, para que ningún paso posterior tenga que volver a preguntar. Salta lo que la Fase 0 ya haya adoptado.
 
-Recoger todo ANTES de instalar nada, para que ningún paso posterior tenga que volver
-a preguntar.
+1. **Su nombre.** Se usa en el saludo final y en cómo se dirige a la persona durante toda la instalación.
+
+2. **La identidad del asistente** (salta esta pregunta entera si la Fase 0 ya adoptó una identidad existente). Tres caminos, en una frase cada uno:
+   - **Usar la mía tal cual** — nombre, voz y personalidad ya definidos por quien construyó PRISM.
+   - **La misma personalidad, con otro nombre** — se queda con el carácter pero la persona elige cómo se llama.
+   - **Construir una desde cero** — la persona define nombre, tono y forma de hablar desde el principio, respondiendo unas pocas preguntas guiadas.
+
+   Nunca elijas en silencio; si la persona duda, ofrece la primera opción como la más simple, pero espera su respuesta.
+
+3. **La bóveda de memoria.** Antes de preguntar, comprueba si Obsidian ya tiene vaults registrados en la máquina (leyendo la config de la propia app, que solo lista rutas, nunca contenido de notas). Si hay alguna, ofrécela por nombre, junto con la opción siempre presente de crear una nueva solo para este asistente. Si Obsidian no está instalado, dilo con claridad: es una pieza obligatoria (así la persona ve y controla la memoria de su propio asistente), y se instala en este mismo paso con su permiso.
+
+   Una bóveda nueva se crea directamente en la carpeta personal de la persona, junto a la carpeta del asistente (nunca dentro). En cuanto exista, di la ruta completa en voz alta.
+
+<!-- A partir de aquí, pendiente de las piezas reales:
+- Preguntas de voz (motor, tecla de activación, modo manos libres/pulsar-para-hablar)
+  una vez se decida si es pieza propia o backtalk sin modificar.
+- Preguntas de cara (elegir entre las caras propias de Rubén, cuando existan).
+- Permisos: si el asistente pide confirmación antes de actuar, o actúa sin preguntar.
 -->
 
 ## Fase 3: Instalar las piezas
