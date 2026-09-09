@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+html, body { margin: 0; padding: 0; background: #04050a; }
+a { color: #6fe6ff; text-decoration: none; }
+a:hover { color: #ff7be2; }
+</style>
+</helmet>
+<div style="min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 28px 20px; background: radial-gradient(120% 90% at 50% 42%, #0a0d18 0%, #05060c 55%, #030409 100%); font-family: 'Chakra Petch', system-ui, sans-serif;">
+  <div style="position: relative; width: min(100%, 560px, 54vh); aspect-ratio: 1 / 1;">
+    <canvas ref="{{ setCanvas }}" style="display: block; width: 100%; height: 100%;"></canvas>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+    <div style="font-size: 26px; font-weight: 300; letter-spacing: 0.46em; text-indent: 0.46em; color: #dcecf6;">PRISM</div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.34em; text-indent: 0.34em; color: rgba(150,175,200,0.55); text-transform: uppercase;">personal ai assistant</div>
+  </div>
+  <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;">
+    <button onClick="{{ goListening }}" style="appearance: none; cursor: pointer; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.16); border-radius: 2px; padding: 9px 15px 7px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6;" style-hover="border-color: rgba(120,200,235,0.4);">
+      <span>listening</span>
+      <span style="width: 100%; height: 2px; background: #2ff3ff; box-shadow: 0 0 8px #2ff3ff; opacity: {{ actListening }};"></span>
+    </button>
+    <button onClick="{{ goThinking }}" style="appearance: none; cursor: pointer; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.16); border-radius: 2px; padding: 9px 15px 7px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6;" style-hover="border-color: rgba(120,200,235,0.4);">
+      <span>thinking</span>
+      <span style="width: 100%; height: 2px; background: #b06bff; box-shadow: 0 0 8px #b06bff; opacity: {{ actThinking }};"></span>
+    </button>
+    <button onClick="{{ goSpeaking }}" style="appearance: none; cursor: pointer; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.16); border-radius: 2px; padding: 9px 15px 7px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6;" style-hover="border-color: rgba(120,200,235,0.4);">
+      <span>speaking</span>
+      <span style="width: 100%; height: 2px; background: #ff4fd8; box-shadow: 0 0 8px #ff4fd8; opacity: {{ actSpeaking }};"></span>
+    </button>
+    <button onClick="{{ goRest }}" style="appearance: none; cursor: pointer; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.16); border-radius: 2px; padding: 9px 15px 7px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6;" style-hover="border-color: rgba(120,200,235,0.4);">
+      <span>rest</span>
+      <span style="width: 100%; height: 2px; background: #8b6bff; box-shadow: 0 0 8px #8b6bff; opacity: {{ actRest }};"></span>
+    </button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;autoCycle&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;rotationSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.45,&quot;min&quot;:0,&quot;max&quot;:1.6,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;glow&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0,&quot;max&quot;:2,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Look&quot;}}">
+class Component extends DCLogic {
+  state = { mode: 'listening' };
+
+  constructor(props) {
+    super(props);
+    this.setCanvas = (el) => { this.canvasEl = el; if (el) this.boot(); };
+    this.goListening = () => this.pick('listening');
+    this.goThinking = () => this.pick('thinking');
+    this.goSpeaking = () => this.pick('speaking');
+    this.goRest = () => this.pick('rest');
+  }
+
+  pick(m) {
+    this.userPicked = performance.now() / 1000;
+    this.mode = m;
+    this.modeT = 0;
+    this.setState({ mode: m });
+  }
+
+  renderVals() {
+    const m = this.state.mode;
+    const on = (k) => (m === k ? 1 : 0.12);
+    return {
+      setCanvas: this.setCanvas,
+      goListening: this.goListening,
+      goThinking: this.goThinking,
+      goSpeaking: this.goSpeaking,
+      goRest: this.goRest,
+      actListening: on('listening'),
+      actThinking: on('thinking'),
+      actSpeaking: on('speaking'),
+      actRest: on('rest')
+    };
+  }
+
+  componentWillUnmount() {
+    this.dead = true;
+    if (this.raf) cancelAnimationFrame(this.raf);
+    if (this.ro) this.ro.disconnect();
+  }
+
+  // ---------- setup ----------
+  boot() {
+    if (this.booted) return;
+    this.booted = true;
+    const c = this.canvasEl;
+    this.ctx = c.getContext('2d');
+    this.scene = document.createElement('canvas');
+    this.sctx = this.scene.getContext('2d');
+    this.small = document.createElement('canvas');
+    this.smctx = this.small.getContext('2d');
+    this.S = 440;
+    this.fx = document.createElement('canvas');
+    this.fx.width = this.fx.height = this.S;
+    this.fxc = this.fx.getContext('2d');
+
+    this.mode = this.state.mode;
+    this.modeT = 0;
+    this.t = 0;
+    this.vol = 0.2; this.volTarget = 0.2; this.volClock = 0;
+    this.rings = [];
+    this.arcs = [];
+    this.motes = [];
+    for (let i = 0; i < 16; i++) this.motes.push({ x: Math.random() * this.S, y: Math.random() * this.S, a: Math.random() * 6.28, s: 6 + Math.random() * 14 });
+    this.parts = [];
+    for (let i = 0; i < 110; i++) this.parts.push(this.newPart());
+    this.cols = [];
+    const GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ01<>{}/\\=+*#§¤ΔΣΞΨΛΦ';
+    this.glyphs = GLYPHS;
+    const x0 = this.S * 0.19, span = this.S * 0.62;
+    for (let i = 0; i < 15; i++) this.cols.push({ x: x0 + i * (span / 14), y: -Math.random() * this.S, sp: 70 + Math.random() * 150, cell: 17, chars: [], acc: 0 });
+
+    this.resize();
+    this.ro = new ResizeObserver(() => this.resize());
+    this.ro.observe(c);
+    this.last = performance.now();
+    const loop = (now) => {
+      if (this.dead) return;
+      const dt = Math.min(0.05, (now - this.last) / 1000);
+      this.last = now;
+      this.frame(dt);
+      this.raf = requestAnimationFrame(loop);
+    };
+    this.raf = requestAnimationFrame(loop);
+  }
+
+  newPart() {
+    const S = this.S, r = Math.random() * S * 0.3, a = Math.random() * 6.283;
+    return { x: S / 2 + Math.cos(a) * r, y: S / 2 + Math.sin(a) * r, px: 0, py: 0, life: 1 + Math.random() * 4, seed: Math.random() * 100 };
+  }
+
+  resize() {
+    const c = this.canvasEl;
+    if (!c) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(120, c.clientWidth), h = Math.max(120, c.clientHeight);
+    this.w = Math.round(w * dpr); this.h = Math.round(h * dpr);
+    c.width = this.w; c.height = this.h;
+    this.scene.width = this.w; this.scene.height = this.h;
+    this.small.width = Math.max(1, Math.round(this.w / 4));
+    this.small.height = Math.max(1, Math.round(this.h / 4));
+  }
+
+  // ---------- color ----------
+  prism(t) {
+    t = ((t % 1) + 1) % 1;
+    const A = [47, 243, 255], B = [255, 79, 216], C = [139, 107, 255];
+    let a, b, k;
+    if (t < 0.5) { a = A; b = B; k = t / 0.5; } else { a = B; b = C; k = (t - 0.5) / 0.5; }
+    k = k * k * (3 - 2 * k);
+    return [Math.round(a[0] + (b[0] - a[0]) * k), Math.round(a[1] + (b[1] - a[1]) * k), Math.round(a[2] + (b[2] - a[2]) * k)];
+  }
+  rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+
+  // ---------- geometry ----------
+  project() {
+    const spd = this.props.rotationSpeed != null ? this.props.rotationSpeed : 0.55;
+    const t = this.t;
+    const ay = t * 0.42 * spd;
+    const ax = 0.34 + Math.sin(t * 0.23 * spd) * 0.22;
+    const R = 1.0;
+    const V = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+    const sc = Math.min(this.w, this.h) * 0.30;
+    const d = 5.2;
+    const out = [];
+    for (const v of V) {
+      let x = v[0] * R * 0.62, y = v[1] * R * 0.62, z = v[2] * R * 0.62;
+      let x2 = x * Math.cos(ay) + z * Math.sin(ay);
+      let z2 = -x * Math.sin(ay) + z * Math.cos(ay);
+      let y2 = y * Math.cos(ax) - z2 * Math.sin(ax);
+      let z3 = y * Math.sin(ax) + z2 * Math.cos(ax);
+      const f = d / (d - z3);
+      out.push({ x: this.w / 2 + x2 * sc * f, y: this.h / 2 - y2 * sc * f, z: z3, y3: y2, f: f });
+    }
+    let lo = Infinity, hi = -Infinity;
+    for (const p of out) { if (p.y3 < lo) lo = p.y3; if (p.y3 > hi) hi = p.y3; }
+    this.yLo = lo; this.ySpan = Math.max(0.001, hi - lo);
+    this.R3 = 1.08; this.sc = sc;
+    return out;
+  }
+
+  hull(pts) {
+    const p = pts.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower = [], upper = [];
+    for (const q of p) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop(); lower.push(q); }
+    for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop(); upper.push(q); }
+    lower.pop(); upper.pop();
+    return lower.concat(upper);
+  }
+
+  // ---------- interior effects ----------
+  fade(a) {
+    const g = this.fxc;
+    g.globalCompositeOperation = 'destination-out';
+    g.fillStyle = 'rgba(0,0,0,' + a + ')';
+    g.fillRect(0, 0, this.S, this.S);
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  fxPlasma(dt) {
+    const g = this.fxc, S = this.S, C = S / 2, Rr = S * 0.34;
+    this.fade(0.16);
+    // ambient motes drifting like charged dust
+    g.globalCompositeOperation = 'lighter';
+    for (const m of this.motes) {
+      m.a += (Math.sin(this.t * 0.7 + m.s) * 0.9) * dt;
+      m.x += Math.cos(m.a) * m.s * dt; m.y += Math.sin(m.a) * m.s * dt;
+      const dx = m.x - C, dy = m.y - C, r = Math.hypot(dx, dy);
+      if (r > Rr) { m.x = C + dx / r * Rr * 0.9; m.y = C + dy / r * Rr * 0.9; m.a += 2.2; }
+      const col = this.prism(0.1 + (m.y / S) * 0.8);
+      g.fillStyle = this.rgba(col, 0.5);
+      g.beginPath(); g.arc(m.x, m.y, 1.1, 0, 6.284); g.fill();
+    }
+    // static electricity arcs
+    const rate = 3 + this.vol * 14;
+    this.arcAcc = (this.arcAcc || 0) + dt * rate;
+    while (this.arcAcc > 1) {
+      this.arcAcc -= 1;
+      const a1 = Math.random() * 6.283, a2 = a1 + 1.2 + Math.random() * 3.4;
+      const r1 = Rr * (0.2 + Math.random() * 0.8), r2 = Rr * (0.2 + Math.random() * 0.8);
+      this.arcs.push({ x1: C + Math.cos(a1) * r1, y1: C + Math.sin(a1) * r1, x2: C + Math.cos(a2) * r2, y2: C + Math.sin(a2) * r2, life: 0.16 + Math.random() * 0.18, age: 0, seed: Math.random() * 99 });
+    }
+    for (let i = this.arcs.length - 1; i >= 0; i--) {
+      const a = this.arcs[i];
+      a.age += dt;
+      if (a.age > a.life) { this.arcs.splice(i, 1); continue; }
+      const k = 1 - a.age / a.life;
+      const col = this.prism(0.05 + (a.y1 / S) * 0.9);
+      g.strokeStyle = this.rgba(col, 0.75 * k);
+      g.lineWidth = 1.15; g.lineCap = 'round';
+      g.shadowBlur = 9; g.shadowColor = this.rgba(col, 0.8 * k);
+      g.beginPath();
+      const N = 9;
+      for (let s = 0; s <= N; s++) {
+        const u = s / N;
+        const jx = (Math.sin(a.seed + u * 17 + this.t * 22) + Math.sin(a.seed * 2.3 + u * 31)) * 5.5 * Math.sin(u * Math.PI);
+        const jy = (Math.cos(a.seed * 1.7 + u * 21 + this.t * 19)) * 5.5 * Math.sin(u * Math.PI);
+        const x = a.x1 + (a.x2 - a.x1) * u + jx, y = a.y1 + (a.y2 - a.y1) * u + jy;
+        s === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+      }
+      g.stroke();
+      g.shadowBlur = 0;
+    }
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  fxThinking(dt) {
+    const g = this.fxc, S = this.S, C = S / 2, Rr = S * 0.36;
+    this.fade(0.055);
+    g.globalCompositeOperation = 'lighter';
+    g.lineCap = 'round';
+    for (const p of this.parts) {
+      const nx = p.x / S, ny = p.y / S, t = this.t;
+      let vx = Math.sin(ny * 7.5 + t * 0.6 + p.seed * 0.02) + Math.cos(nx * 5.2 - t * 0.42);
+      let vy = Math.cos(nx * 8.1 - t * 0.55) - Math.sin(ny * 4.6 + t * 0.37) - 0.5;
+      const dx = p.x - C, dy = p.y - C, r = Math.hypot(dx, dy) + 0.001;
+      if (r > Rr * 0.86) { const pull = (r - Rr * 0.86) / (Rr * 0.2); vx -= (dx / r) * pull * 3.2; vy -= (dy / r) * pull * 3.2; }
+      const sp = 46;
+      p.px = p.x; p.py = p.y;
+      p.x += vx * sp * dt; p.y += vy * sp * dt;
+      p.life -= dt;
+      if (p.life <= 0 || r > Rr * 1.15) { const np = this.newPart(); Object.assign(p, np); p.px = p.x; p.py = p.y; continue; }
+      const col = this.prism(0.02 + (1 - p.y / S) * 0.94);
+      g.strokeStyle = this.rgba(col, 0.34);
+      g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(p.px, p.py); g.lineTo(p.x, p.y); g.stroke();
+    }
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  fxSpeaking(dt) {
+    const g = this.fxc, S = this.S;
+    this.fade(0.13);
+    g.globalCompositeOperation = 'lighter';
+    g.font = '600 14px "JetBrains Mono", monospace';
+    g.textAlign = 'center';
+    for (const c of this.cols) {
+      c.y += c.sp * dt;
+      c.acc += c.sp * dt;
+      while (c.acc >= c.cell) {
+        c.acc -= c.cell;
+        c.chars.unshift({ ch: this.glyphs[(Math.random() * this.glyphs.length) | 0], y: c.y });
+        if (c.chars.length > 12) c.chars.pop();
+      }
+      if (c.y > S + 60) { c.y = -40 - Math.random() * 120; c.chars = []; c.sp = 70 + Math.random() * 150; }
+      for (let i = 0; i < c.chars.length; i++) {
+        const ch = c.chars[i];
+        const k = 1 - i / c.chars.length;
+        if (ch.y < -20 || ch.y > S + 20) continue;
+        if (i === 0) {
+          g.fillStyle = 'rgba(226,250,255,0.95)';
+          g.shadowBlur = 12; g.shadowColor = 'rgba(120,240,255,0.9)';
+        } else {
+          const col = this.prism(0.06 + (ch.y / S) * 0.9);
+          g.fillStyle = this.rgba(col, 0.5 * k);
+          g.shadowBlur = 6; g.shadowColor = this.rgba(col, 0.4 * k);
+        }
+        if (Math.random() < 0.02) ch.ch = this.glyphs[(Math.random() * this.glyphs.length) | 0];
+        g.fillText(ch.ch, c.x, ch.y);
+      }
+      g.shadowBlur = 0;
+    }
+    g.globalCompositeOperation = 'source-over';
+  }
+
+  // ---------- frame ----------
+  frame(dt) {
+    const ctx = this.ctx, g = this.sctx, w = this.w, h = this.h;
+    if (!w) return;
+    this.t += dt;
+    this.modeT += dt;
+
+    if (this.props.autoCycle !== false) {
+      const since = this.userPicked ? (performance.now() / 1000 - this.userPicked) : 999;
+      if (since > 12 && this.modeT > 6) {
+        const order = ['listening', 'thinking', 'speaking', 'rest'];
+        const next = order[(order.indexOf(this.mode) + 1) % 4];
+        this.mode = next; this.modeT = 0;
+        if (this.state.mode !== next) this.setState({ mode: next });
+      }
+    } else if (this.mode !== this.state.mode) {
+      this.mode = this.state.mode;
+    }
+
+    // simulated voice level
+    this.volClock -= dt;
+    if (this.volClock <= 0) {
+      this.volClock = 0.09 + Math.random() * 0.14;
+      this.volTarget = Math.random() < 0.22 ? 0.65 + Math.random() * 0.35 : 0.08 + Math.random() * 0.35;
+    }
+    this.vol += (this.volTarget - this.vol) * Math.min(1, dt * 9);
+
+    const P = this.project();
+    const hull = this.hull(P);
+
+    // interior layer
+    const mode = this.mode;
+    if (mode === 'listening') this.fxPlasma(dt);
+    else if (mode === 'thinking') this.fxThinking(dt);
+    else if (mode === 'speaking') this.fxSpeaking(dt);
+    else this.fade(0.5);
+
+    g.clearRect(0, 0, w, h);
+
+    // faint volumetric core
+    const core = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, this.sc * 1.5);
+    const cc = this.prism(0.35 + Math.sin(this.t * 0.3) * 0.15);
+    core.addColorStop(0, this.rgba(cc, 0.1 + (mode === 'listening' ? this.vol * 0.06 : 0.02)));
+    core.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = core;
+    g.fillRect(0, 0, w, h);
+
+    // interior fx clipped to the tetra silhouette
+    g.save();
+    g.beginPath();
+    hull.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+    g.closePath();
+    g.clip();
+    const box = this.sc * 2.35;
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = 0.95;
+    g.drawImage(this.fx, w / 2 - box / 2, h / 2 - box / 2, box, box);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.restore();
+
+    // edges
+    const E = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+    const flow = this.t * 0.16;
+    const glintStrength = mode === 'rest' ? 1 : 0.5;
+    g.lineCap = 'round';
+    E.forEach((e, ei) => {
+      const a = P[e[0]], b = P[e[1]];
+      const N = 26;
+      const glintPos = ((this.t * (mode === 'rest' ? 0.3 : 0.22) + ei * 0.19) % 1);
+      for (let s = 0; s < N; s++) {
+        const u0 = s / N, u1 = (s + 1) / N, um = (u0 + u1) / 2;
+        const x0 = a.x + (b.x - a.x) * u0, y0 = a.y + (b.y - a.y) * u0;
+        const x1 = a.x + (b.x - a.x) * u1, y1 = a.y + (b.y - a.y) * u1;
+        const y3 = a.y3 + (b.y3 - a.y3) * um;
+        const z = a.z + (b.z - a.z) * um;
+        const col = this.prism((1 - (y3 - this.yLo) / this.ySpan) * 0.94 + flow);
+        const depth = (z + 0.7) / 1.4;
+        const dep = 0.42 + 0.58 * Math.max(0, Math.min(1, depth));
+        let d = Math.abs(um - glintPos); d = Math.min(d, 1 - d);
+        const glint = Math.exp(-(d * d) / 0.006) * glintStrength;
+        const lw = (1.05 + 0.7 * dep + glint * 1.5) * (this.w / 560);
+        g.strokeStyle = this.rgba(col, Math.min(1, 0.5 * dep + glint * 0.5));
+        g.lineWidth = lw;
+        g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+        if (glint > 0.15) {
+          g.strokeStyle = 'rgba(240,252,255,' + (glint * 0.75) + ')';
+          g.lineWidth = lw * 0.4;
+          g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+        }
+      }
+    });
+
+    // vertices
+    P.forEach((p) => {
+      const col = this.prism((1 - (p.y3 - this.yLo) / this.ySpan) * 0.94 + flow);
+      const r = 1.9 * p.f * (this.w / 560);
+      g.fillStyle = this.rgba(col, 0.9);
+      g.beginPath(); g.arc(p.x, p.y, r, 0, 6.284); g.fill();
+      g.fillStyle = 'rgba(245,253,255,0.95)';
+      g.beginPath(); g.arc(p.x, p.y, r * 0.42, 0, 6.284); g.fill();
+    });
+
+    if (mode === 'listening') this.drawMic(g);
+
+    // ---- composite with bloom / neon fog ----
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(this.scene, 0, 0);
+    const gain = this.props.glow != null ? this.props.glow : 1;
+    this.smctx.clearRect(0, 0, this.small.width, this.small.height);
+    this.smctx.drawImage(this.scene, 0, 0, this.small.width, this.small.height);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.filter = 'blur(' + (3 * (this.w / 560)) + 'px)';
+    ctx.globalAlpha = 0.55 * gain;
+    ctx.drawImage(this.small, 0, 0, w, h);
+    ctx.filter = 'blur(' + (11 * (this.w / 560)) + 'px)';
+    ctx.globalAlpha = 0.42 * gain;
+    ctx.drawImage(this.small, 0, 0, w, h);
+    ctx.filter = 'blur(' + (26 * (this.w / 560)) + 'px)';
+    ctx.globalAlpha = 0.26 * gain;
+    ctx.drawImage(this.small, 0, 0, w, h);
+    ctx.filter = 'none';
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  drawMic(g) {
+    const w = this.w, h = this.h, cx = w / 2, cy = h / 2, k = this.w / 560;
+    // rings driven by voice level
+    this.ringAcc = (this.ringAcc || 0) + 1;
+    if (this.vol > 0.55 && (!this.lastRing || this.t - this.lastRing > 0.26)) {
+      this.lastRing = this.t;
+      this.rings.push({ r: 16 * k, a: 0.6, v: this.vol });
+    } else if (!this.lastRing || this.t - this.lastRing > 0.85) {
+      this.lastRing = this.t;
+      this.rings.push({ r: 16 * k, a: 0.32, v: this.vol });
+    }
+    for (let i = this.rings.length - 1; i >= 0; i--) {
+      const r = this.rings[i];
+      r.r += (36 + r.v * 130) * k * 0.016;
+      r.a *= 0.982;
+      if (r.a < 0.012 || r.r > this.sc * 2.4) { this.rings.splice(i, 1); continue; }
+      const col = this.prism(0.12 + (r.r / (this.sc * 2)) * 0.7);
+      g.strokeStyle = this.rgba(col, r.a);
+      g.lineWidth = 1.1 * k;
+      g.beginPath(); g.arc(cx, cy, r.r, 0, 6.284); g.stroke();
+    }
+    // mic glyph
+    const s = 1.15 * k * (1 + this.vol * 0.06);
+    g.save();
+    g.translate(cx, cy);
+    g.scale(s, s);
+    g.strokeStyle = 'rgba(228,250,255,0.92)';
+    g.lineWidth = 1.7; g.lineCap = 'round';
+    g.shadowBlur = 10; g.shadowColor = 'rgba(90,230,255,0.9)';
+    g.beginPath();
+    g.moveTo(-3.6, -10); g.lineTo(3.6, -10);
+    g.arc(0, -10, 3.6, -Math.PI, 0, true);
+    g.closePath();
+    g.beginPath();
+    g.roundRect ? g.roundRect(-3.6, -13.6, 7.2, 14, 3.6) : g.rect(-3.6, -13.6, 7.2, 14);
+    g.stroke();
+    g.beginPath();
+    g.arc(0, -1.5, 7.2, 0, Math.PI);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(0, 5.7); g.lineTo(0, 10.5);
+    g.moveTo(-4.6, 10.5); g.lineTo(4.6, 10.5);
+    g.stroke();
+    g.shadowBlur = 0;
+    g.restore();
+  }
+}
+</script>
+</body>
+</html>
