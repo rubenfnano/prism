@@ -17,14 +17,8 @@ a { color: #6fe6ff; text-decoration: none; }
 a:hover { color: #ff7be2; }
 </style>
 </helmet>
-<div style="min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 28px 20px; background: radial-gradient(120% 90% at 50% 42%, #0a0d18 0%, #05060c 55%, #030409 100%); font-family: 'Chakra Petch', system-ui, sans-serif;">
-  <div style="position: relative; width: min(100%, 560px, 54vh); aspect-ratio: 1 / 1;">
-    <canvas ref="{{ setCanvas }}" style="display: block; width: 100%; height: 100%;"></canvas>
-  </div>
-  <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
-    <div style="font-size: 26px; font-weight: 300; letter-spacing: 0.46em; text-indent: 0.46em; color: #dcecf6;">PRISM</div>
-    <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.34em; text-indent: 0.34em; color: rgba(150,175,200,0.55); text-transform: uppercase;">personal ai assistant</div>
-  </div>
+<div style="min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; background: radial-gradient(120% 90% at 50% 42%, #0a0d18 0%, #05060c 55%, #030409 100%); font-family: 'Chakra Petch', system-ui, sans-serif;">
+  <div style="flex-shrink: 0; display: flex; justify-content: center; padding: 18px 20px; border-bottom: 1px solid rgba(120,200,235,0.1);">
   <div style="display: inline-flex; align-items: stretch; gap: 2px; padding: 4px; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.14); border-radius: 4px;">
     <button onClick="{{ goListening }}" style="appearance: none; cursor: pointer; background: rgba(47,243,255, calc({{ actListening }} * 0.09)); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
       <span>listening</span>
@@ -48,6 +42,15 @@ a:hover { color: #ff7be2; }
       <span style="width: 100%; height: 2px; background: #2ff3ff; box-shadow: 0 0 8px #2ff3ff; opacity: {{ actChat }};"></span>
     </button>
   </div>
+  </div>
+  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 28px 20px;">
+  <div style="position: relative; width: min(100%, 560px, 54vh); aspect-ratio: 1 / 1;">
+    <canvas ref="{{ setCanvas }}" style="display: block; width: 100%; height: 100%;"></canvas>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+    <div style="font-size: 26px; font-weight: 300; letter-spacing: 0.46em; text-indent: 0.46em; color: #dcecf6;">PRISM</div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.34em; text-indent: 0.34em; color: rgba(150,175,200,0.55); text-transform: uppercase;">personal ai assistant</div>
+  </div>
   <div ref="{{ setChatPanel }}" style="display: none; width: min(100%, 460px); flex-direction: column; gap: 10px; background: rgba(10,13,22,0.7); border: 1px solid rgba(120,200,235,0.16); border-radius: 4px; padding: 14px; backdrop-filter: blur(6px);">
     <div ref="{{ setMessagesEl }}" style="display: flex; flex-direction: column; gap: 10px; max-height: 260px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.55;"></div>
     <div style="display: flex; gap: 8px; align-items: flex-end;">
@@ -55,11 +58,12 @@ a:hover { color: #ff7be2; }
       <button onClick="{{ sendMessage }}" style="appearance: none; cursor: pointer; background: #2ff3ff; border: none; border-radius: 3px; color: #04050a; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; padding: 9px 12px;">&#8593;</button>
     </div>
   </div>
+  </div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;autoCycle&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;rotationSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.45,&quot;min&quot;:0,&quot;max&quot;:1.6,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;glow&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0,&quot;max&quot;:2,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Look&quot;}}">
 class Component extends DCLogic {
-  state = { mode: 'listening', chatOpen: false };
+  state = { mode: 'rest', chatOpen: false };
 
   constructor(props) {
     super(props);
@@ -92,6 +96,33 @@ class Component extends DCLogic {
     this.handleKey = (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.sendMessage(); }
     };
+
+    // ---- push-to-talk on the space bar, same shape as the corporate face:
+    // hold to listen, release to think then speak, then back to rest.
+    // Ignored while typing in the chat box (space should type a space).
+    this.pttTimer = null;
+    this.onGlobalKeyDown = (e) => {
+      if (e.code !== 'Space' || e.repeat) return;
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+      e.preventDefault();
+      clearTimeout(this.pttTimer);
+      this.pick('listening');
+    };
+    this.onGlobalKeyUp = (e) => {
+      if (e.code !== 'Space') return;
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+      if (this.mode !== 'listening') return;
+      e.preventDefault();
+      this.pick('thinking');
+      this.pttTimer = setTimeout(() => {
+        this.pick('speaking');
+        this.pttTimer = setTimeout(() => this.pick('rest'), 2200);
+      }, 900);
+    };
+    window.addEventListener('keydown', this.onGlobalKeyDown);
+    window.addEventListener('keyup', this.onGlobalKeyUp);
   }
 
   pick(m) {
@@ -196,6 +227,9 @@ class Component extends DCLogic {
     this.dead = true;
     if (this.raf) cancelAnimationFrame(this.raf);
     if (this.ro) this.ro.disconnect();
+    window.removeEventListener('keydown', this.onGlobalKeyDown);
+    window.removeEventListener('keyup', this.onGlobalKeyUp);
+    clearTimeout(this.pttTimer);
   }
 
   // ---------- setup ----------
