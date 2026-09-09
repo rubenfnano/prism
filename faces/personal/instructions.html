@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRISM — How it works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #04050a; }
+  body {
+    font-family: 'Chakra Petch', system-ui, sans-serif;
+    color: #dcecf6;
+    background: radial-gradient(120% 90% at 50% 0%, #0a0d18 0%, #05060c 55%, #030409 100%);
+    min-height: 100vh;
+    box-sizing: border-box;
+    padding: 48px 20px 60px;
+  }
+  .wrap { max-width: 620px; margin: 0 auto; }
+  h1 {
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    text-indent: 0.3em;
+    font-size: 28px;
+    margin: 0 0 6px;
+  }
+  .kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-indent: 0.3em;
+    color: rgba(150,175,200,0.6);
+    text-transform: uppercase;
+    margin: 0 0 40px;
+  }
+  h2 {
+    font-weight: 500;
+    font-size: 15px;
+    letter-spacing: 0.04em;
+    color: #9fe8ff;
+    margin: 36px 0 6px;
+  }
+  p { line-height: 1.65; color: rgba(220,236,246,0.85); font-size: 14.5px; }
+  .card {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    padding: 16px 18px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(120,200,235,0.14);
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+  .card .icon {
+    width: 30px; height: 30px; flex-shrink: 0;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(47,243,255,0.08);
+    border: 1px solid rgba(47,243,255,0.25);
+    color: #6fe6ff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .card h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: #eaf6fc; }
+  .card p { margin: 0; font-size: 13.5px; }
+  kbd {
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(120,200,235,0.25);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 12px;
+  }
+  .back {
+    display: inline-block;
+    margin-top: 44px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #6fe6ff;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(111,230,255,0.35);
+    padding-bottom: 2px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 id="title">PRISM</h1>
+    <div class="kicker" id="kicker">Personality · Reasoning · Interface · Speech · Memory</div>
+
+    <p id="intro"></p>
+
+    <h2 id="h-talk"></h2>
+    <div class="card">
+      <div class="icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+      </div>
+      <div>
+        <h3 id="card1-title"></h3>
+        <p id="card1-body"></p>
+      </div>
+    </div>
+
+    <h2 id="h-live"></h2>
+    <div class="card">
+      <div class="icon">●</div>
+      <div>
+        <h3 id="card2-title"></h3>
+        <p id="card2-body"></p>
+      </div>
+    </div>
+
+    <h2 id="h-chat"></h2>
+    <div class="card">
+      <div class="icon">＋</div>
+      <div>
+        <h3 id="card3-title"></h3>
+        <p id="card3-body"></p>
+      </div>
+    </div>
+
+    <h2 id="h-transcript"></h2>
+    <p id="transcript-body"></p>
+
+    <a class="back" href="javascript:window.close()" id="back-link"></a>
+  </div>
+
+<script>
+const LANG = (((navigator.languages && navigator.languages[0]) || navigator.language || 'en') + '').toLowerCase().startsWith('es') ? 'es' : 'en';
+const STR = {
+  en: {
+    intro: 'PRISM is a personal AI assistant face — three ways to talk to it, all reaching the same conversation.',
+    hTalk: 'Hold to talk',
+    card1Title: 'Space bar, or the mic button',
+    card1Body: 'Hold the space bar — or press and hold the microphone button at the bottom of the screen — and speak. Release to let it think and reply.',
+    hLive: 'Live conversation',
+    card2Title: '"live" in the top menu',
+    card2Body: 'Click once to start a continuous, hands-free conversation, like a phone call — it keeps listening, thinking and replying in a loop until you click it again to end the call.',
+    hChat: 'Type instead',
+    card3Title: '"chat" in the top menu',
+    card3Body: 'Opens a text panel to type instead of speaking — useful when you want to review something in writing, or in a quiet room.',
+    hTranscript: 'One conversation, not three',
+    transcriptBody: 'Whatever you say by voice — hold-to-talk or live — is written into the same transcript shown in the chat panel. Switch to chat at any point and the conversation is right there, not lost.',
+    back: '← Back to PRISM',
+  },
+  es: {
+    intro: 'PRISM es la cara de un asistente de IA personal — tres formas de hablar con él, todas llegan a la misma conversación.',
+    hTalk: 'Mantener para hablar',
+    card1Title: 'Barra espaciadora, o el botón del micrófono',
+    card1Body: 'Mantén pulsada la barra espaciadora — o el botón de micrófono en la parte inferior de la pantalla — y habla. Suelta para que piense y responda.',
+    hLive: 'Conversación en vivo',
+    card2Title: '"en vivo" en el menú superior',
+    card2Body: 'Pulsa una vez para empezar una conversación continua, sin tener que pulsar nada más, como una llamada de teléfono — escucha, piensa y responde en bucle hasta que vuelvas a pulsarlo para colgar.',
+    hChat: 'Escribir en su lugar',
+    card3Title: '"chat" en el menú superior',
+    card3Body: 'Abre un panel de texto para escribir en vez de hablar — útil cuando quiere repasar algo por escrito, o en una sala silenciosa.',
+    hTranscript: 'Una sola conversación, no tres',
+    transcriptBody: 'Lo que diga por voz — manteniendo pulsado o en una llamada en vivo — se escribe en la misma transcripción que muestra el panel de chat. Cambie a chat en cualquier momento y la conversación está ahí, no se pierde.',
+    back: '← Volver a PRISM',
+  },
+};
+const T = STR[LANG];
+document.getElementById('intro').textContent = T.intro;
+document.getElementById('h-talk').textContent = T.hTalk;
+document.getElementById('card1-title').textContent = T.card1Title;
+document.getElementById('card1-body').textContent = T.card1Body;
+document.getElementById('h-live').textContent = T.hLive;
+document.getElementById('card2-title').textContent = T.card2Title;
+document.getElementById('card2-body').textContent = T.card2Body;
+document.getElementById('h-chat').textContent = T.hChat;
+document.getElementById('card3-title').textContent = T.card3Title;
+document.getElementById('card3-body').textContent = T.card3Body;
+document.getElementById('h-transcript').textContent = T.hTranscript;
+document.getElementById('transcript-body').textContent = T.transcriptBody;
+document.getElementById('back-link').textContent = T.back;
+</script>
+</body>
+</html>
