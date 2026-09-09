@@ -42,12 +42,23 @@ a:hover { color: #ff7be2; }
       <span>rest</span>
       <span style="width: 100%; height: 2px; background: #8b6bff; box-shadow: 0 0 8px #8b6bff; opacity: {{ actRest }};"></span>
     </button>
+    <button onClick="{{ toggleChat }}" style="appearance: none; cursor: pointer; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.16); border-radius: 2px; padding: 9px 15px 7px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6;" style-hover="border-color: rgba(120,200,235,0.4);">
+      <span>chat</span>
+      <span style="width: 100%; height: 2px; background: #2ff3ff; box-shadow: 0 0 8px #2ff3ff; opacity: {{ actChat }};"></span>
+    </button>
+  </div>
+  <div ref="{{ setChatPanel }}" style="display: none; width: min(100%, 460px); flex-direction: column; gap: 10px; background: rgba(10,13,22,0.7); border: 1px solid rgba(120,200,235,0.16); border-radius: 4px; padding: 14px; backdrop-filter: blur(6px);">
+    <div ref="{{ setMessagesEl }}" style="display: flex; flex-direction: column; gap: 10px; max-height: 260px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.55;"></div>
+    <div style="display: flex; gap: 8px; align-items: flex-end;">
+      <textarea ref="{{ setTextInput }}" onKeyDown="{{ handleKey }}" rows="1" placeholder="Escribe a tu asistente..." style="flex: 1; resize: none; background: rgba(255,255,255,0.03); border: 1px solid rgba(120,200,235,0.18); border-radius: 3px; color: #dcecf6; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; padding: 8px 10px; max-height: 90px; outline: none;"></textarea>
+      <button onClick="{{ sendMessage }}" style="appearance: none; cursor: pointer; background: #2ff3ff; border: none; border-radius: 3px; color: #04050a; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; padding: 9px 12px;">&#8593;</button>
+    </div>
   </div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;autoCycle&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;rotationSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.45,&quot;min&quot;:0,&quot;max&quot;:1.6,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;glow&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0,&quot;max&quot;:2,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Look&quot;}}">
 class Component extends DCLogic {
-  state = { mode: 'listening' };
+  state = { mode: 'listening', chatOpen: false };
 
   constructor(props) {
     super(props);
@@ -56,6 +67,30 @@ class Component extends DCLogic {
     this.goThinking = () => this.pick('thinking');
     this.goSpeaking = () => this.pick('speaking');
     this.goRest = () => this.pick('rest');
+
+    // ---- chat: just a toggle + a plain-DOM message list, wired through
+    // refs like the canvas already is. Doesn't touch the visualizer above.
+    this.setChatPanel = (el) => { this.chatPanelEl = el; };
+    this.setMessagesEl = (el) => { this.messagesEl = el; if (el && !this.seeded) { this.seeded = true; this.seedChat(); } };
+    this.setTextInput = (el) => { this.textInputEl = el; };
+    this.toggleChat = () => {
+      const open = !this.state.chatOpen;
+      this.setState({ chatOpen: open });
+      if (this.chatPanelEl) this.chatPanelEl.style.display = open ? 'flex' : 'none';
+    };
+    this.sendMessage = () => {
+      const el = this.textInputEl;
+      if (!el) return;
+      const value = el.value.trim();
+      if (!value) return;
+      this.addMessage('user', value);
+      el.value = '';
+      this.pick('speaking');
+      this.respondTo(value);
+    };
+    this.handleKey = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.sendMessage(); }
+    };
   }
 
   pick(m) {
@@ -63,6 +98,74 @@ class Component extends DCLogic {
     this.mode = m;
     this.modeT = 0;
     this.setState({ mode: m });
+  }
+
+  // ---- chat: plain DOM, same "ver cambios" collapsible pattern as the
+  // corporate face, ported here so a code change doesn't clutter the chat.
+  addMessage(role, text, change) {
+    const el = this.messagesEl;
+    if (!el) return;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;flex-direction:column;gap:4px;' + (role === 'user' ? 'align-items:flex-end;' : 'align-items:flex-start;');
+    const bubble = document.createElement('div');
+    bubble.style.cssText = 'max-width:88%;padding:8px 10px;border-radius:3px;color:#dcecf6;' +
+      (role === 'user' ? 'background:rgba(139,107,255,0.14);border:1px solid rgba(139,107,255,0.3);' : 'background:rgba(47,243,255,0.08);border:1px solid rgba(47,243,255,0.22);');
+    bubble.textContent = text;
+    row.appendChild(bubble);
+
+    if (change) {
+      const card = document.createElement('div');
+      card.style.cssText = 'max-width:88%;border:1px solid rgba(120,200,235,0.2);border-radius:3px;overflow:hidden;background:rgba(0,0,0,0.3);';
+      const summary = document.createElement('div');
+      summary.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;user-select:none;background:rgba(255,255,255,0.03);';
+      summary.innerHTML = '<span style="color:#2ff3ff;">' + change.file + '</span>' +
+        '<span style="color:#2ff3ff;">+' + change.added + '</span>' +
+        '<span style="color:#ff4fd8;">-' + change.removed + '</span>' +
+        '<span style="margin-left:auto;color:#8d93a6;">&#9656;</span>';
+      const diff = document.createElement('div');
+      diff.style.cssText = 'max-height:0;overflow:hidden;transition:max-height .2s ease;';
+      const pre = document.createElement('pre');
+      pre.style.cssText = 'margin:0;padding:8px 10px;font-size:10.5px;line-height:1.6;white-space:pre;overflow-x:auto;';
+      pre.innerHTML = change.diff;
+      diff.appendChild(pre);
+      let open = false;
+      summary.addEventListener('click', () => {
+        open = !open;
+        diff.style.maxHeight = open ? '260px' : '0';
+        diff.style.overflowY = open ? 'auto' : 'hidden';
+      });
+      card.appendChild(summary);
+      card.appendChild(diff);
+      row.appendChild(card);
+    }
+
+    el.appendChild(row);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  respondTo(text) {
+    setTimeout(() => {
+      const lower = text.toLowerCase();
+      if (lower.includes('menu') || lower.includes('menú') || lower.includes('móvil')) {
+        this.addMessage('assistant', 'Arreglado — el menú no tenía botón en móvil. Añadí una hamburguesa que despliega los mismos enlaces.', {
+          file: 'NavBar.tsx', added: 9, removed: 1,
+          diff: '<span style="color:#767d98;">  export default function NavBar() {</span>\n' +
+                '<span style="color:#a9f2e6;">+   const [open, setOpen] = useState(false);</span>\n' +
+                '<span style="color:#767d98;">    return (</span>',
+        });
+      } else {
+        this.addMessage('assistant', 'Anotado. ¿Lo hago ya, o lo revisas primero?');
+      }
+      this.pick('rest');
+    }, 900);
+  }
+
+  seedChat() {
+    this.addMessage('user', 'Arregla el menú móvil, no hay forma de navegar');
+    this.addMessage('assistant', 'Confirmado y arreglado — añadido un botón de hamburguesa en móvil.', {
+      file: 'NavBar.tsx', added: 9, removed: 1,
+      diff: '<span style="color:#a9f2e6;">+   const [open, setOpen] = useState(false);</span>',
+    });
   }
 
   renderVals() {
@@ -77,7 +180,14 @@ class Component extends DCLogic {
       actListening: on('listening'),
       actThinking: on('thinking'),
       actSpeaking: on('speaking'),
-      actRest: on('rest')
+      actRest: on('rest'),
+      actChat: this.state.chatOpen ? 1 : 0.12,
+      setChatPanel: this.setChatPanel,
+      setMessagesEl: this.setMessagesEl,
+      setTextInput: this.setTextInput,
+      toggleChat: this.toggleChat,
+      sendMessage: this.sendMessage,
+      handleKey: this.handleKey
     };
   }
 
