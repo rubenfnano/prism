@@ -369,9 +369,16 @@ class Component extends DCLogic {
     fetch('/voice/start', { method: 'POST' }).catch(() => {});
   }
 
+  // trim=1 only for "en vivo": a blind fixed-length window has no press/
+  // release to mark where speech starts and ends, so it needs the
+  // silence cut out. A push-to-talk press already IS that marker — like
+  // backtalk's record_held(), the raw capture goes untouched, which
+  // matters on a quiet Bluetooth mic where trimming risked clipping the
+  // first or last word (found live, by Rubén, 2026-09-10).
   stopRecordingAndSend() {
     if (!this.bridgeReady) { this.pick('rest'); return; }
-    fetch('/voice/stop', { method: 'POST' }).catch(() => {
+    const url = this.uiMode === 'live' ? '/voice/stop?trim=1' : '/voice/stop';
+    fetch(url, { method: 'POST' }).catch(() => {
       if (this.mode === 'listening' || this.mode === 'thinking') this.pick('rest');
     });
   }

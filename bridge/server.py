@@ -368,7 +368,16 @@ class Bridge:
         )
         self._record_stream.start()
 
-    def stop_recording(self) -> np.ndarray:
+    def stop_recording(self, trim: bool = False) -> np.ndarray:
+        """trim=False (push-to-talk's default) mirrors backtalk's
+        record_held(): "the button is the VAD, no endpointing" — the
+        person's own press/release already marks the start and end, so
+        the raw capture goes to Whisper untouched. VAD trimming is only
+        for "live" mode's blind fixed-length windows, which have no such
+        marker and genuinely need the silence cut out. Trimming a
+        deliberate PTT press was clipping real speech on a quiet
+        Bluetooth signal (found live, by Rubén, 2026-09-10: the start or
+        end of what he said kept going missing)."""
         if self._record_stream is None:
             return np.zeros(0, dtype=np.int16)
         self._record_stream.stop()
@@ -377,8 +386,15 @@ class Bridge:
         frames = self._recording_frames or []
         self._recording_frames = None
         if not frames:
+            print("[bridge] stop_recording: no frames captured at all", flush=True)
             return np.zeros(0, dtype=np.int16)
-        return trim_to_speech(np.concatenate(frames))
+        raw = np.concatenate(frames)
+        rms = float(np.sqrt(np.mean(raw.astype(np.float64) ** 2))) if raw.size else 0.0
+        peak = int(np.abs(raw).max()) if raw.size else 0
+        result = trim_to_speech(raw) if trim else raw
+        print(f"[bridge] stop_recording: {raw.size} samples, rms={rms:.1f}, peak={peak}/32768, "
+              f"trim={trim}, using {result.size} samples", flush=True)
+        return result
 
     async def transcribe(self, pcm: np.ndarray) -> str:
         if pcm.size == 0:
@@ -481,7 +497,8 @@ async def handle_voice_start(request: web.Request):
 
 async def handle_voice_stop(request: web.Request):
     bridge: Bridge = request.app["bridge"]
-    pcm = bridge.stop_recording()
+    trim = request.query.get("trim") == "1"
+    pcm = bridge.stop_recording(trim=trim)
     asyncio.create_task(_run_safely(bridge, bridge.voice_turn(pcm)))
     return web.json_response({"ok": True}, status=202)
 
