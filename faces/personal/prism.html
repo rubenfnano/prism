@@ -269,24 +269,37 @@ class Component extends DCLogic {
   }
 
   async startPolling() {
+    let caughtUp = false;
     const poll = async () => {
       try {
         const res = await fetch('/events?since=' + this._lastEventId);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         if (!this.bridgeReady) this.bridgeReady = true;
-        // greet exactly ONCE per page load — a poll can legitimately
-        // blip (a slow turn on the Pi, a moment of network hiccup) and
-        // flip bridgeReady false->true again, and re-greeting on every
-        // one of those looked like the assistant talking on its own
-        // (found live, by Rubén, 2026-09-10: "no he dicho nada")
-        if (!this._greeted && this.seeded) {
-          this._greeted = true;
-          this.sendGreet();
-        }
-        for (const ev of data.events) {
-          this._lastEventId = Math.max(this._lastEventId, ev.id);
-          this.handleEvent(ev);
+        if (!caughtUp) {
+          // A fresh page load starts at since=0, but the SERVER keeps
+          // the whole session's event log regardless of page reloads —
+          // without this, opening/reloading the page replayed (and
+          // SPOKE) the entire conversation history as if it had just
+          // happened (found live, by Rubén, 2026-09-10: "se ha vuelto
+          // loco a hablar todo esto"). Jump straight to "now", silently,
+          // once — every poll after this one behaves normally.
+          caughtUp = true;
+          for (const ev of data.events) this._lastEventId = Math.max(this._lastEventId, ev.id);
+        } else {
+          // greet exactly ONCE per page load — a poll can legitimately
+          // blip (a slow turn on the Pi, a moment of network hiccup) and
+          // flip bridgeReady false->true again, and re-greeting on every
+          // one of those looked like the assistant talking on its own
+          // (found live, by Rubén, 2026-09-10: "no he dicho nada")
+          if (!this._greeted && this.seeded) {
+            this._greeted = true;
+            this.sendGreet();
+          }
+          for (const ev of data.events) {
+            this._lastEventId = Math.max(this._lastEventId, ev.id);
+            this.handleEvent(ev);
+          }
         }
       } catch (e) {
         this.bridgeReady = false;
