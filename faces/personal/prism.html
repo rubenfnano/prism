@@ -331,7 +331,7 @@ class Component extends DCLogic {
       this.pick(msg.value);
       if (msg.value === 'rest') this._openBubble = null;
     } else if (msg.type === 'audio') {
-      this.queueAudio(msg.data);
+      this.queueAudio(msg.id);
     } else if (msg.type === 'error') {
       console.error('[prism] bridge error:', msg.text);
       this.addMessage('assistant', T.bridgeError + ': ' + msg.text);
@@ -385,26 +385,41 @@ class Component extends DCLogic {
 
   // Sentences arrive (and finish synthesizing) one at a time now, not as
   // a single clip for the whole reply — queued and played back to back,
-  // so a later sentence never interrupts one still playing.
-  queueAudio(base64Wav) {
+  // so a later sentence never interrupts one still playing. The clip
+  // itself is fetched on demand from /audio/<id>, NOT embedded as base64
+  // in the polled JSON — a big base64 string in every /events response
+  // was blocking long enough to freeze/stutter the tetraedro's own
+  // render loop (found live, by Rubén, 2026-09-10).
+  queueAudio(audioId) {
     clearTimeout(this._liveContinueTimer);
     if (!this._audioQueue) this._audioQueue = [];
-    this._audioQueue.push(base64Wav);
+    this._audioQueue.push(audioId);
     if (!this._playingAudio) this._playNextAudio();
   }
 
-  _playNextAudio() {
-    const next = this._audioQueue && this._audioQueue.shift();
-    if (!next) {
+  async _playNextAudio() {
+    const nextId = this._audioQueue && this._audioQueue.shift();
+    if (nextId == null) {
       this._playingAudio = false;
       if (this.uiMode === 'live' && this.mode !== 'thinking') this.liveCycle();
       return;
     }
     this._playingAudio = true;
     this.pick('speaking');
-    const audio = new Audio('data:audio/wav;base64,' + next);
-    audio.addEventListener('ended', () => this._playNextAudio());
-    audio.play().catch(() => this._playNextAudio());
+    let url;
+    try {
+      const res = await fetch('/audio/' + nextId);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      url = URL.createObjectURL(blob);
+    } catch (e) {
+      this._playNextAudio();
+      return;
+    }
+    const audio = new Audio(url);
+    const cleanup = () => { URL.revokeObjectURL(url); this._playNextAudio(); };
+    audio.addEventListener('ended', cleanup);
+    audio.play().catch(cleanup);
   }
 
   sendToBridge(text) {

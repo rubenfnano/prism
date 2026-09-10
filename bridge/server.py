@@ -48,7 +48,6 @@ socket-specific.
 from __future__ import annotations
 
 import asyncio
-import base64
 import io
 import itertools
 import json
@@ -127,7 +126,7 @@ def trim_to_speech(pcm: np.ndarray, aggressiveness: int = 2) -> np.ndarray:
     return pcm[start:end]
 
 
-def pcm_to_wav_b64(chunks: list[np.ndarray], sample_rate: int) -> str:
+def pcm_to_wav(chunks: list[np.ndarray], sample_rate: int) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(1)
@@ -135,7 +134,7 @@ def pcm_to_wav_b64(chunks: list[np.ndarray], sample_rate: int) -> str:
         wf.setframerate(sample_rate)
         for chunk in chunks:
             wf.writeframes(chunk.tobytes())
-    return base64.b64encode(buf.getvalue()).decode("ascii")
+    return buf.getvalue()
 
 
 class Bridge:
@@ -171,6 +170,13 @@ class Bridge:
         # single-user assumption as everything else here.
         self._record_stream: sd.InputStream | None = None
         self._recording_frames: list[np.ndarray] | None = None
+        # Synthesized clips, keyed by the 'audio' event's own id — kept
+        # OUT of the polled JSON (see synthesize()/handle_audio below):
+        # embedding a big base64 string in every /events response was
+        # blocking the face's render loop long enough to freeze/stutter
+        # the tetraedro (found live, by Rubén, 2026-09-10). A handful of
+        # recent clips is all a single-user session ever needs at once.
+        self._audio_store: dict[int, bytes] = {}
         cfg = VoiceConfig.load(VOICE_CONFIG_PATH)
         self._stt = stt_engine(cfg.stt_engine, **cfg.stt_options)
         self._tts = tts_engine(cfg.tts_engine, **cfg.tts_options)
@@ -236,12 +242,14 @@ class Bridge:
         self._tts.unload()
 
     # ---- the event log: every client polls this, nobody "connects" ----
-    def _emit(self, event_type: str, **fields) -> None:
-        self._events.append({"id": next(self._event_ids), "type": event_type, **fields})
+    def _emit(self, event_type: str, **fields) -> dict:
+        event = {"id": next(self._event_ids), "type": event_type, **fields}
+        self._events.append(event)
         # unbounded growth would eventually matter on a Pi; nothing needs
         # more than a few minutes of scrollback
         if len(self._events) > 300:
             self._events = self._events[-300:]
+        return event
 
     def events_since(self, since_id: int) -> list[dict]:
         return [e for e in self._events if e["id"] > since_id]
@@ -403,16 +411,18 @@ class Bridge:
         audio_f32 = pcm.astype(np.float32) / 32768.0
         return await loop.run_in_executor(None, self._stt.transcribe, audio_f32, SAMPLE_RATE, self._language)
 
-    async def synthesize(self, text: str) -> str | None:
-        """Returns a base64 WAV, or None if there's nothing worth saying
-        (an empty reply shouldn't play silence)."""
+    async def synthesize(self, text: str) -> bytes | None:
+        """Returns raw WAV bytes, or None if there's nothing worth saying
+        (an empty reply shouldn't play silence). Callers store the
+        result under an event id (see _answer) — the bytes never go
+        through the polled JSON directly."""
         if not text.strip():
             return None
         loop = asyncio.get_running_loop()
 
         def _run():
             chunks = list(self._tts.synthesize(text))
-            return pcm_to_wav_b64(chunks, self._tts.sample_rate)
+            return pcm_to_wav(chunks, self._tts.sample_rate)
 
         return await loop.run_in_executor(None, _run)
 
@@ -447,6 +457,17 @@ class Bridge:
             return
         await self._answer(text, via_voice=False)
 
+    async def _emit_audio(self, text: str) -> None:
+        wav = await self.synthesize(text)
+        if not wav:
+            return
+        event = self._emit("audio", sample_rate=self._tts.sample_rate)
+        self._audio_store[event["id"]] = wav
+        # a handful of recent clips is plenty for one live session
+        if len(self._audio_store) > 20:
+            for old_id in sorted(self._audio_store)[:-20]:
+                del self._audio_store[old_id]
+
     async def _answer(self, text: str, via_voice: bool = False):
         """Speaks and shows text as soon as Claude finishes each sentence
         — NOT the whole reply at once. 'assistant_chunk' events append to
@@ -473,14 +494,10 @@ class Bridge:
             self._emit("assistant_chunk", text=sentence)
             audio_buf = f"{audio_buf} {sentence}".strip()
             if len(audio_buf) >= SPEAK_BATCH_CHARS:
-                audio_b64 = await self.synthesize(audio_buf)
-                if audio_b64:
-                    self._emit("audio", data=audio_b64, sample_rate=self._tts.sample_rate)
+                await self._emit_audio(audio_buf)
                 audio_buf = ""
         if audio_buf:
-            audio_b64 = await self.synthesize(audio_buf)
-            if audio_b64:
-                self._emit("audio", data=audio_b64, sample_rate=self._tts.sample_rate)
+            await self._emit_audio(audio_buf)
         if not said_anything:
             self._emit("assistant", text=NO_TEXT_FALLBACK)
         self.set_mode("rest")
@@ -493,6 +510,18 @@ async def handle_events(request: web.Request):
         "mode": bridge._mode,
         "events": bridge.events_since(since),
     })
+
+
+async def handle_audio(request: web.Request):
+    bridge: Bridge = request.app["bridge"]
+    try:
+        audio_id = int(request.match_info["id"])
+    except ValueError:
+        return web.Response(status=400)
+    wav = bridge._audio_store.get(audio_id)
+    if wav is None:
+        return web.Response(status=404)
+    return web.Response(body=wav, content_type="audio/wav")
 
 
 async def handle_voice_start(request: web.Request):
@@ -543,6 +572,7 @@ async def make_app():
     await bridge.start()
     app["bridge"] = bridge
     app.router.add_get("/events", handle_events)
+    app.router.add_get("/audio/{id}", handle_audio)
     app.router.add_post("/voice/start", handle_voice_start)
     app.router.add_post("/voice/stop", handle_voice_stop)
     app.router.add_post("/chat", handle_chat)
