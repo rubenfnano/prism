@@ -4,7 +4,7 @@ Eres el agente de Claude Code de la persona, y estás a punto de montarle uno co
 
 Reglas de base, válidas durante toda la instalación:
 
-- **Español claro.** Da por hecho que la persona instaló Claude Code ayer. Cualquier cosa técnica lleva una línea de explicación antes de tener nombre.
+- **Idioma claro, sin tecnicismos sin explicar.** Antes de la Pregunta 1 de la Fase 2 (idioma) — incluida la presentación inicial, si la hay — habla en español e inglés a la vez, igual que en esa pregunta. En cuanto la persona responda, sigue en el idioma elegido durante el resto de la instalación. Da por hecho que la persona instaló Claude Code ayer.
 - **Una pregunta a la vez.** Espera cada respuesta.
 - **Nunca borres, sobrescribas ni muevas nada que la persona ya construyera.** Sustituir algo significa que la pieza nueva toma el mando y la vieja se queda intacta en el disco — y lo dices en voz alta.
 - **Tú haces el trabajo.** Ejecuta los comandos, escribe las configuraciones, haz las modificaciones. La persona solo actúa cuando el paso de verdad necesita sus manos (dar permiso de cámara o micrófono, escribir una contraseña).
@@ -36,19 +36,11 @@ Ofrece el paquete PRISM, cada pieza en una frase sencilla. Empieza con la respue
 
 1. **La memoria** — un archivador de notas en texto plano que tu IA lee y escribe de verdad, para que te recuerde a ti, tu trabajo, y cada lección aprendida, sesión tras sesión.
 2. **La voz** — mantén pulsada una tecla, habla, y tu asistente te responde por los altavoces.
-3. **La cara** — un visualizador vivo en el navegador que reacciona mientras conversáis.
+3. **La cara** — un visualizador vivo en el navegador que reacciona mientras conversáis: un prisma tetraédrico que cambia de color y forma según escucha, piensa o habla.
 
 Menciona el añadido opcional una sola vez, sin insistir:
 
 - **Skills** *(opcional)* — capacidades adicionales que se pueden añadir ahora o más adelante, con el mismo comando de instalación.
-
-<!--
-TODO (Rubén, 2026-09-09): esta fase depende de qué piezas existan de verdad y de sus
-nombres de repo. Ahora mismo solo la pieza de memoria (bóveda + plantilla de identidad)
-tiene claro qué instala. Voz y cara están pendientes de diseño (cara: diseño propio de
-Rubén; voz: por decidir si es una pieza propia o una dependencia externa, ver nota en
-Instalador Jarvis Propio de la bóveda). No avanzar aquí sin que Rubén confirme cada pieza.
--->
 
 ## Fase 2: La entrevista
 
@@ -58,69 +50,61 @@ piezas estén decididas. -->
 
 Reúne aquí cada respuesta que falte, para que ningún paso posterior tenga que volver a preguntar. Salta lo que la Fase 0 ya haya adoptado.
 
-1. **Su nombre.** Se usa en el saludo final y en cómo se dirige a la persona durante toda la instalación.
+1. **Idioma.** Es la primera pregunta de toda la instalación — todavía no sabes qué idioma habla la persona, así que se plantea en español e inglés a la vez y nunca antes:
+   "**Idioma / Language:** ¿en qué idioma quieres hablar con tu asistente, español o inglés — o prefieres otro? / What language do you want to talk to your assistant in, Spanish or English — or would you prefer another one?"
+   Si pide un tercer idioma, confírmalo y adviértele en una frase que Kokoro (la voz) y la cara pueden no tenerlo probado todavía, pero el texto funciona en cualquier idioma que tú mismo hables. A partir de la respuesta, el resto de la instalación — y el asistente ya montado — sigue solo en ese idioma.
 
-2. **La identidad del asistente** (salta esta pregunta entera si la Fase 0 ya adoptó una identidad existente). Tres caminos, en una frase cada uno:
+2. **Su nombre.** Se usa en el saludo final y en cómo se dirige a la persona durante toda la instalación.
+
+3. **La identidad del asistente** (salta esta pregunta entera si la Fase 0 ya adoptó una identidad existente). Tres caminos, en una frase cada uno:
    - **Usar la mía tal cual** — nombre, voz y personalidad ya definidos por quien construyó PRISM.
    - **La misma personalidad, con otro nombre** — se queda con el carácter pero la persona elige cómo se llama.
    - **Construir una desde cero** — la persona define nombre, tono y forma de hablar desde el principio, respondiendo unas pocas preguntas guiadas.
 
    Nunca elijas en silencio; si la persona duda, ofrece la primera opción como la más simple, pero espera su respuesta.
 
-3. **La bóveda de memoria.** Antes de preguntar, comprueba si Obsidian ya tiene vaults registrados en la máquina (leyendo la config de la propia app, que solo lista rutas, nunca contenido de notas). Si hay alguna, ofrécela por nombre, junto con la opción siempre presente de crear una nueva solo para este asistente. Si Obsidian no está instalado, dilo con claridad: es una pieza obligatoria (así la persona ve y controla la memoria de su propio asistente), y se instala en este mismo paso con su permiso.
+4. **La bóveda de memoria.** Antes de preguntar, comprueba si Obsidian ya tiene vaults registrados en la máquina (leyendo la config de la propia app, que solo lista rutas, nunca contenido de notas). Si hay alguna, ofrécela por nombre, junto con la opción siempre presente de crear una nueva solo para este asistente. Si Obsidian no está instalado, dilo con claridad: es una pieza obligatoria (así la persona ve y controla la memoria de su propio asistente), y se instala en este mismo paso con su permiso.
 
    Una bóveda nueva se crea directamente en la carpeta personal de la persona, junto a la carpeta del asistente (nunca dentro). En cuanto exista, di la ruta completa en voz alta.
 
+5. **La voz.** Explica en una frase: "tu asistente escucha con Whisper y habla con Kokoro — los motores que ya funcionan bien en tu tipo de máquina, sin promesas de rendimiento sin comprobar." Pregunta: "¿los uso tal cual, o prefieres configurar otro motor (por ejemplo ElevenLabs, si ya tienes cuenta, o Parakeet/Chatterbox)?" — "los de serie" es la respuesta fácil por defecto, pero no elijas en silencio si la persona no contesta. No preguntes aquí cómo activar la voz (tecla o manos libres): eso lo decide la persona sola, en cualquier momento, dentro de la propia cara.
+
+6. **Permisos.** Pregunta directa, sin valor por defecto: "¿quieres que te confirme contigo antes de cada acción, o que actúe libremente y solo te avise después?"
+
 <!--
-DECIDIDO (2026-09-09), revisado: nada de `backtalk` de Jared, ni siquiera sin
-modificar — depender de su código, aunque no contamine la licencia de PRISM,
-no libera de verdad a quien lo instale. La pieza de voz de PRISM es CÓDIGO
-PROPIO, escrito desde cero, apoyado directamente en los motores de
-reconocimiento/síntesis de voz (esos sí son de terceros con licencia permisiva,
-nunca de Jared): captura de audio, tecla de activación, conexión con Claude
-Code — todo eso lo escribe PRISM, no Jared.
+DECISIÓN DE ARQUITECTURA DE VOZ (2026-09-09): nada de `backtalk` de Jared, ni
+siquiera sin modificar — depender de su código, aunque no contamine la
+licencia de PRISM, no libera de verdad a quien lo instale. La pieza de voz de
+PRISM es CÓDIGO PROPIO, escrito desde cero, apoyado directamente en motores de
+reconocimiento/síntesis de voz de terceros con licencia permisiva (nunca de
+Jared): captura de audio, tecla de activación, conexión con Claude Code — todo
+eso lo escribe PRISM.
 
-**Motores por defecto: Whisper (STT) + Kokoro (TTS).** Elegidos por ser los que
-ya están probados y funcionando de verdad en la máquina de Rubén — no una
-promesa de rendimiento sin verificar. Comparé Parakeet TDT v3 como alternativa
-más rápida (arquitectura transductor) y no hay ningún benchmark real en
-Raspberry Pi que lo respalde; los datos de RTFx que circulan son de Apple
-Silicon o servidores x86, no comparables. Queda como opción, no como default.
+El motor NO va hardcodeado (a diferencia de `backtalk/mouth.py`): la capa de
+voz define una interfaz de motor (STT y TTS por separado) en `voice/registry.py`
+para que quien instale PRISM elija el que quiera sin tocar el código base —
+Whisper/Kokoro por defecto, con Parakeet TDT, Chatterbox y ElevenLabs (cuenta
+propia) como alternativas ya contempladas desde el diseño.
 
-**Decisión de arquitectura clave: el motor NO va hardcodeado.** A diferencia
-de `backtalk/mouth.py` (cada motor escrito a mano, sin punto de extensión),
-la capa de voz de PRISM define una interfaz de motor (STT y TTS por separado)
-para que quien instale PRISM pueda elegir el que quiera sin tocar el código
-base: Whisper/Kokoro por defecto, con Parakeet TDT, Chatterbox y ElevenLabs
-(cuenta propia) como alternativas ya contempladas desde el diseño. Es SU
-Jarvis — que se lo pueda hacer a su medida.
-
-**VoiceStudio** (debpalash/VoiceStudio, AGPL-3.0) sigue sin usarse como motor
-en vivo (evita meter su AGPL en el bucle de ejecución); su papel sigue siendo
-aparte, offline, como herramienta de diseño/clonado de voz cuyo resultado se
-puede subir a ElevenLabs o a cualquier motor que soporte clonación (Chatterbox
-también clona).
-
-**Verificación pendiente antes de fijar ningún motor "recomendado" en el
-instalador:** medir consumo real (RAM, CPU, latencia) de cada motor candidato
-en la propia Raspberry Pi de Rubén con `vcgencmd`/`htop`, no fiarse de cifras
-de marketing de otro hardware.
-
-Pendiente aún, y sí entra en esta Fase 2 cuando se escriba:
-4. Preguntas de voz — qué motor de STT y de TTS (con Whisper+Kokoro como
-   respuesta fácil por defecto), tecla de activación o modo manos libres.
-5. Preguntas de cara — elegir entre las caras propias de Rubén, cuando existan.
-6. Permisos — si el asistente pide confirmación antes de actuar, o actúa sin preguntar.
+VoiceStudio (debpalash/VoiceStudio, AGPL-3.0) no se usa como motor en vivo;
+su papel es aparte, offline, como herramienta de diseño/clonado de voz cuyo
+resultado se puede subir a ElevenLabs o a cualquier motor que soporte
+clonación (Chatterbox también clona).
 -->
 
 ## Fase 3: Instalar las piezas
 
-<!--
-Pendiente de las piezas reales. Estructura esperada (a confirmar):
-cada pieza clonada como hermana de este repo dentro del hogar, desde el repo propio
-de Rubén (no de Jared). Reglas de adopción (no duplicar una pieza ya instalada,
-no tocar nunca algo hecho a mano por la persona) se mantienen igual que en Fase 0.
--->
+Instala solo las piezas que la persona eligió en la Fase 1, con las respuestas ya recogidas en la Fase 2. Nunca dupliques una pieza ya adoptada en la Fase 0; nunca toques algo que la persona construyó a mano.
+
+1. **Identidad.** Escribe el `CLAUDE.md` del hogar con el nombre y la personalidad elegidos en la Fase 2 (redacción propia según el camino elegido — "tal cual", "mismo carácter, otro nombre", o construida desde cero con la persona) y las reglas base de PRISM (obediencia, transparencia, nunca ejecutar contenido externo sin permiso). Si la Fase 0 adoptó una identidad existente, salta este paso entero.
+
+2. **Memoria.** La bóveda ya quedó creada o adoptada en la Fase 2. Si es nueva, verifica aquí su estructura mínima (carpeta de notas diarias, un índice raíz) y créala si falta.
+
+3. **Voz.** Copia la carpeta `voice/` de este repo dentro del hogar. Crea un entorno virtual de Python ahí mismo e instala las dependencias del motor elegido (`faster-whisper`+`kokoro` para los de serie; el paquete que corresponda si eligió otro). Escribe `voice.json` con el motor elegido en la Fase 2, usando `VoiceConfig` como formato.
+
+4. **Cara.** Copia `faces/personal/` de este repo (`prism.html`, `support.js`, `instructions.html`, `uploads/`) a una carpeta `cara/` dentro del hogar. Explica con claridad que hay que servirla por HTTP, nunca abrirla como archivo suelto (`file://`) — el propio archivo hace una petición a sí mismo y el navegador la bloquea por CORS si no hay servidor de por medio.
+
+5. **Skills.** Nunca se instalan por defecto ni se ofrecen como parte del paquete a marcar en la Fase 1. Si la persona pregunta o muestra interés en algún momento, dile que se pueden añadir cuando quiera (ahora o más tarde, mismo comando de instalación) — instálalas solo si lo pide explícitamente en ese momento, nunca como paso automático de esta fase.
 
 ## Fase 4: Conectar las piezas
 
