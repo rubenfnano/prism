@@ -437,7 +437,7 @@ class Bridge:
             self.set_mode("rest")
             return
         self._emit("user_transcript", text=transcript)
-        await self._answer(transcript)
+        await self._answer(transcript, via_voice=True)
 
     async def chat_turn(self, text: str):
         if self.awaiting_confirm_id:
@@ -445,9 +445,9 @@ class Bridge:
             approved = bool(_YES_RE.match(text.strip()))
             self.resolve_confirm(confirm_id, approved)
             return
-        await self._answer(text)
+        await self._answer(text, via_voice=False)
 
-    async def _answer(self, text: str):
+    async def _answer(self, text: str, via_voice: bool = False):
         """Speaks and shows text as soon as Claude finishes each sentence
         — NOT the whole reply at once. 'assistant_chunk' events append to
         the same chat bubble client-side; a bare 'assistant' event only
@@ -458,10 +458,17 @@ class Bridge:
         short sentence sounded choppy (found live, by Rubén,
         2026-09-10): every clip boundary is an audible seam, and short
         sentences meant a lot of them. Batching trades a little of the
-        latency win for noticeably smoother speech."""
+        latency win for noticeably smoother speech.
+
+        via_voice tags what's actually SENT to Claude (never the
+        displayed transcript) with a short marker — otherwise a spoken
+        turn looks identical to a typed one on Claude's side, and asking
+        "¿me estás escuchando?" out loud got answered as if nothing had
+        been heard at all (found live, by Rubén, 2026-09-10)."""
+        prompt = f"[Te acaba de hablar por voz, no escribir] {text}" if via_voice else text
         said_anything = False
         audio_buf = ""
-        async for sentence in self.ask_stream(text):
+        async for sentence in self.ask_stream(prompt):
             said_anything = True
             self._emit("assistant_chunk", text=sentence)
             audio_buf = f"{audio_buf} {sentence}".strip()
