@@ -23,12 +23,19 @@ avoids installing torch/whisper in two separate environments.
 Endpoints:
   GET  /events?since=<id>   new events since <id>, plus current state.
                              Polled continuously by the face (~3-4x/sec).
-  POST /voice   (binary body: whatever MediaRecorder produced)
-                             one recorded turn. Returns immediately
-                             (202) — the real work happens in the
-                             background and shows up via /events.
+  POST /voice/start         opens the mic (sounddevice, native OS
+                             capture — NOT the browser's MediaRecorder,
+                             switched 2026-09-10: a webm blob from the
+                             browser had no silence trimmed out of it,
+                             and that was hurting transcription badly)
+                             and starts buffering.
+  POST /voice/stop          closes the mic, trims silence with
+                             webrtcvad, and processes the turn in the
+                             background — the result shows up via
+                             /events, same as everything else.
   POST /chat    ({"text": "..."} or {"type": "greet"})
-                             same as above, for typed turns.
+                             a typed turn, same background-then-poll
+                             shape as voice.
   GET  /                    the face, served as static files.
 
 Permission handling mirrors backtalk's spoken gate (brain.py /
@@ -52,6 +59,8 @@ import wave
 from pathlib import Path
 
 import numpy as np
+import sounddevice as sd
+import webrtcvad
 from aiohttp import web
 from claude_agent_sdk import (
     ClaudeAgentOptions,
@@ -85,29 +94,37 @@ NO_TEXT_FALLBACK = (
 )
 CONFIRM_TIMEOUT_S = 120
 SPEAK_BATCH_CHARS = 80  # synthesize roughly this many characters at a time
-WHISPER_SAMPLE_RATE = 16000
+SAMPLE_RATE = 16000
+VAD_FRAME_MS = 30
+VAD_FRAME_SAMPLES = SAMPLE_RATE * VAD_FRAME_MS // 1000  # 480
 _YES_RE = re.compile(r"^\s*(s(í|i)|claro|vale|yes|ok)\b", re.IGNORECASE)
 
 
-def decode_audio(data: bytes) -> tuple[np.ndarray, int]:
-    """Whatever container the browser recorded (webm/opus in practice) ->
-    16kHz mono float32, decoded with PyAV so no extra dependency (or a
-    system ffmpeg binary) is needed beyond what faster-whisper already
-    installs."""
-    import av
-
-    container = av.open(io.BytesIO(data))
-    resampler = av.AudioResampler(format="fltp", layout="mono", rate=WHISPER_SAMPLE_RATE)
-    chunks = []
-    stream = container.streams.audio[0]
-    for frame in container.decode(stream):
-        frame.pts = None
-        for rframe in resampler.resample(frame):
-            chunks.append(rframe.to_ndarray())
-    container.close()
-    if not chunks:
-        return np.zeros(0, dtype=np.float32), WHISPER_SAMPLE_RATE
-    return np.concatenate(chunks, axis=1).flatten().astype(np.float32), WHISPER_SAMPLE_RATE
+def trim_to_speech(pcm: np.ndarray, aggressiveness: int = 2) -> np.ndarray:
+    """Cuts leading/trailing silence (and drops a recording that's
+    silence throughout) with webrtcvad, so Whisper only ever sees the
+    part of the clip that actually sounds like speech — a browser
+    MediaRecorder blob had no such trim, silence and background noise
+    included, and that was a real source of bad transcriptions (found
+    live, by Rubén, 2026-09-10, comparing against how backtalk captures
+    audio). ~90ms of padding is kept on each side so a soft consonant
+    at the very start/end of speech doesn't get clipped."""
+    vad = webrtcvad.Vad(aggressiveness)
+    n = len(pcm) // VAD_FRAME_SAMPLES
+    if n == 0:
+        return np.zeros(0, dtype=np.int16)
+    is_speech = [
+        vad.is_speech(pcm[i * VAD_FRAME_SAMPLES:(i + 1) * VAD_FRAME_SAMPLES].tobytes(), SAMPLE_RATE)
+        for i in range(n)
+    ]
+    if not any(is_speech):
+        return np.zeros(0, dtype=np.int16)
+    first = is_speech.index(True)
+    last = len(is_speech) - 1 - is_speech[::-1].index(True)
+    pad = 3
+    start = max(0, first - pad) * VAD_FRAME_SAMPLES
+    end = min(len(pcm), (last + 1 + pad) * VAD_FRAME_SAMPLES)
+    return pcm[start:end]
 
 
 def pcm_to_wav_b64(chunks: list[np.ndarray], sample_rate: int) -> str:
@@ -148,6 +165,12 @@ class Bridge:
         # serialized without blocking confirm resolution, which never
         # touches the client.
         self._turn_lock = asyncio.Lock()
+        # Native mic capture (sounddevice), not the browser's
+        # MediaRecorder — same technique backtalk uses, own code against
+        # the same public library. One recording at a time, same
+        # single-user assumption as everything else here.
+        self._record_stream: sd.InputStream | None = None
+        self._recording_frames: list[np.ndarray] | None = None
         cfg = VoiceConfig.load(VOICE_CONFIG_PATH)
         self._stt = stt_engine(cfg.stt_engine, **cfg.stt_options)
         self._tts = tts_engine(cfg.tts_engine, **cfg.tts_options)
@@ -202,6 +225,10 @@ class Bridge:
         print("[bridge] voice engines ready", flush=True)
 
     async def stop(self):
+        if self._record_stream is not None:
+            self._record_stream.stop()
+            self._record_stream.close()
+            self._record_stream = None
         if self._client:
             await self._client.disconnect()
             self._client = None
@@ -325,12 +352,40 @@ class Bridge:
                     self.set_mode("speaking")
                 yield tail
 
-    async def transcribe(self, audio_bytes: bytes) -> str:
-        loop = asyncio.get_running_loop()
-        pcm, rate = await loop.run_in_executor(None, decode_audio, audio_bytes)
+    def start_recording(self):
+        """Opens the mic and starts buffering — stop_recording() does the
+        actual VAD trim once the whole clip is in hand, so this stays
+        cheap and can't glitch mid-capture."""
+        if self._record_stream is not None:
+            return
+        self._recording_frames = []
+
+        def _callback(indata, frames, time_info, status):
+            self._recording_frames.append(indata[:, 0].copy())
+
+        self._record_stream = sd.InputStream(
+            samplerate=SAMPLE_RATE, channels=1, dtype="int16", callback=_callback
+        )
+        self._record_stream.start()
+
+    def stop_recording(self) -> np.ndarray:
+        if self._record_stream is None:
+            return np.zeros(0, dtype=np.int16)
+        self._record_stream.stop()
+        self._record_stream.close()
+        self._record_stream = None
+        frames = self._recording_frames or []
+        self._recording_frames = None
+        if not frames:
+            return np.zeros(0, dtype=np.int16)
+        return trim_to_speech(np.concatenate(frames))
+
+    async def transcribe(self, pcm: np.ndarray) -> str:
         if pcm.size == 0:
             return ""
-        return await loop.run_in_executor(None, self._stt.transcribe, pcm, rate, self._language)
+        loop = asyncio.get_running_loop()
+        audio_f32 = pcm.astype(np.float32) / 32768.0
+        return await loop.run_in_executor(None, self._stt.transcribe, audio_f32, SAMPLE_RATE, self._language)
 
     async def synthesize(self, text: str) -> str | None:
         """Returns a base64 WAV, or None if there's nothing worth saying
@@ -345,14 +400,14 @@ class Bridge:
 
         return await loop.run_in_executor(None, _run)
 
-    async def voice_turn(self, audio_bytes: bytes):
+    async def voice_turn(self, pcm: np.ndarray):
         """The full voice pipeline for one recording: transcribe -> a
         confirm answer if one's pending, otherwise the same ask() a
         typed message goes through -> speak the reply back. The
         transcript is emitted too, so voice and chat share one visible
         transcript."""
         self.set_mode("thinking")
-        transcript = await self.transcribe(audio_bytes)
+        transcript = await self.transcribe(pcm)
 
         if self.awaiting_confirm_id:
             confirm_id = self.awaiting_confirm_id
@@ -417,10 +472,17 @@ async def handle_events(request: web.Request):
     })
 
 
-async def handle_voice(request: web.Request):
+async def handle_voice_start(request: web.Request):
     bridge: Bridge = request.app["bridge"]
-    audio_bytes = await request.read()
-    asyncio.create_task(_run_safely(bridge, bridge.voice_turn(audio_bytes)))
+    bridge.start_recording()
+    bridge.set_mode("listening")
+    return web.json_response({"ok": True})
+
+
+async def handle_voice_stop(request: web.Request):
+    bridge: Bridge = request.app["bridge"]
+    pcm = bridge.stop_recording()
+    asyncio.create_task(_run_safely(bridge, bridge.voice_turn(pcm)))
     return web.json_response({"ok": True}, status=202)
 
 
@@ -457,7 +519,8 @@ async def make_app():
     await bridge.start()
     app["bridge"] = bridge
     app.router.add_get("/events", handle_events)
-    app.router.add_post("/voice", handle_voice)
+    app.router.add_post("/voice/start", handle_voice_start)
+    app.router.add_post("/voice/stop", handle_voice_stop)
     app.router.add_post("/chat", handle_chat)
     app.router.add_static("/", FACE_DIR, show_index=False)
 
