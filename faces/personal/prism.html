@@ -261,52 +261,80 @@ class Component extends DCLogic {
     window.addEventListener('keyup', this.onGlobalKeyUp);
 
     // ---- bridge (Fase 4): real connection to the assistant, replacing the
-    // canned chat above. Voice (ptt/live) still uses logVoiceTurn's demo
-    // turns for now — only typed chat is wired to the real bridge so far.
+    // canned chat above. No WebSocket, no connection to mis-attach — the
+    // bridge is plain HTTP, polled on a timer (rewritten 2026-09-10: a
+    // WebSocket version kept breaking because the server could only
+    // remember ONE tab to answer, and two sessions' replies literally
+    // crossed once). bridgeReady flips true on the first successful poll.
     this.bridgeReady = false;
     this.pendingConfirmId = null;
-    const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-    this.ws = new WebSocket(wsProto + location.host + '/ws');
-    this.ws.addEventListener('open', () => {
-      this.bridgeReady = true;
-      if (this.seeded) this.ws.send(JSON.stringify({ type: 'greet' }));
-    });
-    this.ws.addEventListener('close', () => { this.bridgeReady = false; });
-    this.ws.addEventListener('message', (ev) => {
-      let msg;
-      try { msg = JSON.parse(ev.data); } catch (e) { return; }
-      if (msg.type === 'assistant') {
-        this.addMessage('assistant', msg.text);
-        this.pendingConfirmId = null;
-        if (this.toastEl) this.toastEl.style.opacity = '0';
-        if (this.uiMode === 'live') {
-          // if audio follows, its own "ended" handler drives the next
-          // cycle and cancels this; if this reply had no audio (an empty
-          // or purely-tool-call turn), this is what keeps "live" alive
-          clearTimeout(this._liveContinueTimer);
-          this._liveContinueTimer = setTimeout(() => {
-            if (this.uiMode === 'live') this.liveCycle();
-          }, 600);
+    this._lastEventId = 0;
+    this.startPolling();
+  }
+
+  async startPolling() {
+    const poll = async () => {
+      try {
+        const res = await fetch('/events?since=' + this._lastEventId);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!this.bridgeReady) {
+          this.bridgeReady = true;
+          if (this.seeded) this.sendGreet();
         }
-      } else if (msg.type === 'user_transcript') {
-        // what the mic actually heard — same transcript chat/voice share
-        this.addMessage('user', msg.text);
-      } else if (msg.type === 'confirm_request') {
-        this.pendingConfirmId = msg.id;
-        this.addMessage('assistant', msg.question);
-        // visible in EVERY mode, not just chat — a voice turn while this
-        // is up answers it directly now (see server: voice_confirm_turn)
-        this.showToast(msg.question, true);
-        this.pick('rest');
-      } else if (msg.type === 'state') {
-        this.pick(msg.value);
-      } else if (msg.type === 'audio') {
-        this.playReply(msg.data);
-      } else if (msg.type === 'error') {
-        this.addMessage('assistant', T.bridgeError + ': ' + msg.text);
-        this.pick('rest');
+        for (const ev of data.events) {
+          this._lastEventId = Math.max(this._lastEventId, ev.id);
+          this.handleEvent(ev);
+        }
+      } catch (e) {
+        this.bridgeReady = false;
       }
-    });
+      if (!this.dead) setTimeout(poll, 350);
+    };
+    poll();
+  }
+
+  handleEvent(msg) {
+    if (msg.type === 'assistant') {
+      this.addMessage('assistant', msg.text);
+      this.pendingConfirmId = null;
+      if (this.toastEl) this.toastEl.style.opacity = '0';
+      if (this.uiMode === 'live') {
+        // if audio follows, its own "ended" handler drives the next
+        // cycle and cancels this; if this reply had no audio (an empty
+        // or purely-tool-call turn), this is what keeps "live" alive
+        clearTimeout(this._liveContinueTimer);
+        this._liveContinueTimer = setTimeout(() => {
+          if (this.uiMode === 'live') this.liveCycle();
+        }, 600);
+      }
+    } else if (msg.type === 'user_transcript') {
+      // what the mic actually heard — same transcript chat/voice share
+      this.addMessage('user', msg.text);
+    } else if (msg.type === 'confirm_request') {
+      this.pendingConfirmId = msg.id;
+      this.addMessage('assistant', msg.question);
+      // visible in EVERY mode, not just chat — a voice turn while this
+      // is up answers it directly now (see server: voice_turn)
+      this.showToast(msg.question, true);
+      this.pick('rest');
+    } else if (msg.type === 'state') {
+      this.pick(msg.value);
+    } else if (msg.type === 'audio') {
+      this.playReply(msg.data);
+    } else if (msg.type === 'error') {
+      console.error('[prism] bridge error:', msg.text);
+      this.addMessage('assistant', T.bridgeError + ': ' + msg.text);
+      this.showToast(T.bridgeError + ': ' + msg.text);
+      this.pick('rest');
+    }
+  }
+
+  sendGreet() {
+    fetch('/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'greet' }),
+    }).catch(() => {});
   }
 
   // ---- real voice: one MediaRecorder, reused across turns. First use
@@ -402,7 +430,9 @@ class Component extends DCLogic {
         const buf = await blob.arrayBuffer();
         console.log('[prism] sending audio, bytes=', buf.byteLength, 'bridgeReady=', this.bridgeReady);
         if (buf.byteLength && this.bridgeReady) {
-          this.ws.send(buf);
+          fetch('/voice', { method: 'POST', body: blob }).catch(() => {
+            if (this.mode === 'thinking') this.pick('rest');
+          });
         } else if (this.mode === 'thinking') {
           this.pick('rest');
         }
@@ -431,14 +461,11 @@ class Component extends DCLogic {
       return;
     }
     this.pick('thinking');
-    if (this.pendingConfirmId) {
-      const id = this.pendingConfirmId;
-      this.pendingConfirmId = null;
-      const approved = /^(s(i|í)|yes|y)\b/i.test(text.trim());
-      this.ws.send(JSON.stringify({ type: 'confirm', id, approved }));
-    } else {
-      this.ws.send(JSON.stringify({ type: 'chat', text }));
-    }
+    this.pendingConfirmId = null;
+    fetch('/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }).catch(() => { if (this.mode === 'thinking') this.pick('rest'); });
   }
 
   pick(m) {
@@ -508,13 +535,13 @@ class Component extends DCLogic {
   }
 
   // Whatever is said by voice — push-to-talk or "live" — lands in the same
-  // transcript as typed chat (user_transcript + assistant WS messages),
-  // so switching to the chat panel mid-call shows exactly what was said,
+  // transcript as typed chat (user_transcript + assistant events), so
+  // switching to the chat panel mid-call shows exactly what was said,
   // not a second, disconnected conversation.
 
   seedChat() {
     if (this.bridgeReady) {
-      this.ws.send(JSON.stringify({ type: 'greet' }));
+      this.sendGreet();
     } else {
       this.addMessage('assistant', T.bridgeOffline);
     }
@@ -563,7 +590,6 @@ class Component extends DCLogic {
     window.removeEventListener('keydown', this.onGlobalKeyDown);
     window.removeEventListener('keyup', this.onGlobalKeyUp);
     clearTimeout(this.pttTimer);
-    if (this.ws) this.ws.close();
     if (this.recorder && this.recorder.state === 'recording') this.recorder.stop();
   }
 

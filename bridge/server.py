@@ -1,29 +1,49 @@
-"""PRISM: the bridge (Fase 4).
+"""PRISM: the bridge (Fase 4) — HTTP polling, no WebSocket.
+
+Rewritten 2026-09-10 after a WebSocket-based version kept breaking in
+ways that trace back to one root cause: a persistent connection means
+the server has to track WHICH tab to answer, and that breaks the moment
+there's more than one (two of Rubén's own browser tabs, or — the actual
+bug that triggered this rewrite — a developer's automated test running
+against the same live server a person is also using for real, with
+their two sessions' replies literally crossing).
+
+The fix is to have no connection to mis-attach in the first place, the
+same way ai-visualizer avoids it: state lives on the SERVER, exposed
+over plain HTTP, and every client (however many tabs, however many
+callers) polls it independently. Nothing to attach, nothing to
+mis-route — inspired by that pattern, not its code: this file shares
+no lines with ai-visualizer/server.py, and the actual work here (voice
+decode, the SDK session, the permission gate) has no equivalent there
+at all.
 
 Runs INSIDE the voice piece's own venv (see voice/pyproject.toml) —
-avoids installing torch/whisper in two separate environments. Serves the
-face over HTTP, opens a WebSocket for real-time chat AND voice, and
-drives a persistent Claude Agent SDK session whose cwd is the
-assistant's home folder — whatever CLAUDE.md lives there is who is
-answering.
+avoids installing torch/whisper in two separate environments.
 
-Voice turns arrive as a single BINARY WebSocket frame (the browser's
-whole recording, whatever container MediaRecorder used — webm/opus in
-Chromium) once push-to-talk is released, or every few seconds while
-"live" mode cycles. Decoded with PyAV (already a faster-whisper
-dependency) straight to 16kHz mono float32, so voice/engines never see
-anything but the numpy array they were designed for.
+Endpoints:
+  GET  /events?since=<id>   new events since <id>, plus current state.
+                             Polled continuously by the face (~3-4x/sec).
+  POST /voice   (binary body: whatever MediaRecorder produced)
+                             one recorded turn. Returns immediately
+                             (202) — the real work happens in the
+                             background and shows up via /events.
+  POST /chat    ({"text": "..."} or {"type": "greet"})
+                             same as above, for typed turns.
+  GET  /                    the face, served as static files.
 
 Permission handling mirrors backtalk's spoken gate (brain.py /
-make_permission_gate in main.py), but the question travels over the
-WebSocket as a chat bubble instead of being spoken, and the answer is
-the next chat message instead of a spoken yes/no.
+make_permission_gate in main.py) in SPIRIT — the model pauses on a tool
+call until a person answers — but the question is just another /events
+entry, and the answer is just another /chat or /voice turn (checked
+against whatever confirmation is currently pending), not anything
+socket-specific.
 """
 from __future__ import annotations
 
 import asyncio
 import base64
 import io
+import itertools
 import json
 import re
 import sys
@@ -32,7 +52,7 @@ import wave
 from pathlib import Path
 
 import numpy as np
-from aiohttp import web, WSMsgType
+from aiohttp import web
 from claude_agent_sdk import (
     ClaudeAgentOptions,
     ClaudeSDKClient,
@@ -102,20 +122,23 @@ def pcm_to_wav_b64(chunks: list[np.ndarray], sample_rate: int) -> str:
 class Bridge:
     """One persistent SDK session per server process — a single-user
     assistant, same assumption backtalk makes. Also owns the STT/TTS
-    engines (lazy-loaded, per voice.json) — this process already pays
-    the torch/whisper import cost, no reason to load it twice."""
+    engines (loaded once at boot, see start()) and the small event log
+    that GET /events polls — the only "connection" any client has to
+    this bridge is asking it questions."""
 
     def __init__(self, home_dir: Path):
         self.home_dir = home_dir
         self._client: ClaudeSDKClient | None = None
         self._pending_confirms: dict[str, asyncio.Future] = {}
         self._awaiting_confirm_id: str | None = None
-        self._ws: web.WebSocketResponse | None = None
+        self._mode = "rest"
+        self._events: list[dict] = []
+        self._event_ids = itertools.count(1)
         # ask() can legitimately be in flight while a confirm answer comes
-        # in (that's the whole point of the fix above) — but TWO ask()
-        # calls sharing the one persistent SDK client at once would
-        # interleave their messages. This keeps turns serialized without
-        # blocking confirm resolution, which never touches the client.
+        # in — but TWO ask() calls sharing the one persistent SDK client
+        # at once would interleave their messages. This keeps turns
+        # serialized without blocking confirm resolution, which never
+        # touches the client.
         self._turn_lock = asyncio.Lock()
         cfg = VoiceConfig.load(VOICE_CONFIG_PATH)
         self._stt = stt_engine(cfg.stt_engine, **cfg.stt_options)
@@ -159,19 +182,20 @@ class Bridge:
         self._stt.unload()
         self._tts.unload()
 
-    def attach(self, ws: web.WebSocketResponse):
-        self._ws = ws
+    # ---- the event log: every client polls this, nobody "connects" ----
+    def _emit(self, event_type: str, **fields) -> None:
+        self._events.append({"id": next(self._event_ids), "type": event_type, **fields})
+        # unbounded growth would eventually matter on a Pi; nothing needs
+        # more than a few minutes of scrollback
+        if len(self._events) > 300:
+            self._events = self._events[-300:]
 
-    async def _send(self, payload: dict):
-        """The browser can close mid-turn (a page reload, a lost wifi
-        connection on the Pi) — a dropped socket must never crash the
-        turn or the server, it just means nobody heard the answer."""
-        if self._ws is None or self._ws.closed:
-            return
-        try:
-            await self._ws.send_str(json.dumps(payload))
-        except (ConnectionResetError, ConnectionError):
-            pass
+    def events_since(self, since_id: int) -> list[dict]:
+        return [e for e in self._events if e["id"] > since_id]
+
+    def set_mode(self, mode: str) -> None:
+        self._mode = mode
+        self._emit("state", value=mode)
 
     async def _gate(self, tool, tool_input, ctx):
         """Every tool use passes through here. Whether it actually stops
@@ -184,20 +208,17 @@ class Bridge:
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
         self._pending_confirms[confirm_id] = fut
-        # tracked so a VOICE turn (not just typed chat) can answer this —
-        # single pending confirm at a time, same single-user assumption
-        # as the rest of the bridge
         self._awaiting_confirm_id = confirm_id
         what = f"usar {tool}"
         if isinstance(tool_input, dict) and tool_input.get("command"):
             what = f"ejecutar: {tool_input['command'][:200]}"
         elif isinstance(tool_input, dict) and tool_input.get("file_path"):
             what = f"tocar el archivo {tool_input['file_path']}"
-        await self._send({
-            "type": "confirm_request",
-            "id": confirm_id,
-            "question": f"¿Puedo {what}? Responde sí o no.",
-        })
+        # NOT "id": that key already means the event log's own monotonic
+        # id inside _emit() -- collided with it here once, silently
+        # corrupting it to this UUID string and breaking every poll's
+        # since-comparison from that point on (found testing, 2026-09-10)
+        self._emit("confirm_request", confirm_id=confirm_id, question=f"¿Puedo {what}? Responde sí o no.")
         try:
             approved = await asyncio.wait_for(fut, CONFIRM_TIMEOUT_S)
         except asyncio.TimeoutError:
@@ -211,11 +232,7 @@ class Bridge:
             )
         if approved:
             return PermissionResultAllow(behavior="allow")
-        return PermissionResultDeny(
-            behavior="deny",
-            message="Denegado por la persona.",
-            interrupt=False,
-        )
+        return PermissionResultDeny(behavior="deny", message="Denegado por la persona.", interrupt=False)
 
     def resolve_confirm(self, confirm_id: str, approved: bool):
         if self._awaiting_confirm_id == confirm_id:
@@ -229,7 +246,7 @@ class Bridge:
         text block — a denied/timed-out confirmation with nothing left
         to say, or a tool-only reply — NO_TEXT_FALLBACK explains that
         honestly instead of a bare, confusing "..."."""
-        await self._send({"type": "state", "value": "thinking"})
+        self.set_mode("thinking")
         async with self._turn_lock:
             await self._client.query(text)
             pieces = []
@@ -244,9 +261,8 @@ class Bridge:
                     if getattr(msg, "is_error", False):
                         print(f"[bridge] turn ended with error: {msg!r:.300}", flush=True)
                     break
-        await self._send({"type": "state", "value": "speaking"})
+        self.set_mode("speaking")
         reply = "".join(pieces).strip() or NO_TEXT_FALLBACK
-        await self._send({"type": "state", "value": "rest"})
         return reply
 
     async def transcribe(self, audio_bytes: bytes) -> str:
@@ -269,111 +285,88 @@ class Bridge:
 
         return await loop.run_in_executor(None, _run)
 
-    async def voice_confirm_turn(self, audio_bytes: bytes):
-        """A permission question is waiting for an answer — a PTT/live
-        recording right now means "sí" or "no", not a new question.
-        Without this, the question only ever showed in the chat panel,
-        which isn't even on screen in ptt/live mode: the gate would sit
-        there for the full CONFIRM_TIMEOUT_S with no way to answer it by
-        voice at all (found live, by Rubén, on 2026-09-10)."""
-        confirm_id = self._awaiting_confirm_id
-        await self._send({"type": "state", "value": "thinking"})
-        transcript = await self.transcribe(audio_bytes)
-        if not confirm_id or confirm_id not in self._pending_confirms:
-            # answered or timed out while transcribing — fall through to
-            # a normal turn instead of silently dropping what was said
-            await self._send({"type": "state", "value": "rest"})
-            if transcript:
-                await self.voice_turn_from_transcript(transcript)
-            return
-        approved = bool(_YES_RE.match(transcript.strip())) if transcript else False
-        await self._send({"type": "user_transcript", "text": transcript or "(sin entender)"})
-        self.resolve_confirm(confirm_id, approved)
-
     async def voice_turn(self, audio_bytes: bytes):
-        """The full voice pipeline for one recording: transcribe -> the
-        same ask() a typed message goes through -> speak the reply back.
-        The transcript is sent to the browser too, so voice and chat
-        share one transcript (the same design the face already had for
-        its demo turns) — it's just real now."""
-        if self._awaiting_confirm_id:
-            await self.voice_confirm_turn(audio_bytes)
-            return
-        await self._send({"type": "state", "value": "thinking"})
+        """The full voice pipeline for one recording: transcribe -> a
+        confirm answer if one's pending, otherwise the same ask() a
+        typed message goes through -> speak the reply back. The
+        transcript is emitted too, so voice and chat share one visible
+        transcript."""
+        self.set_mode("thinking")
         transcript = await self.transcribe(audio_bytes)
-        await self.voice_turn_from_transcript(transcript)
 
-    async def voice_turn_from_transcript(self, transcript: str):
-        if not transcript:
-            await self._send({
-                "type": "assistant",
-                "text": "No te he oído bien — ¿lo repites?",
-            })
-            await self._send({"type": "state", "value": "rest"})
+        if self._awaiting_confirm_id:
+            confirm_id = self._awaiting_confirm_id
+            approved = bool(_YES_RE.match(transcript.strip())) if transcript else False
+            self._emit("user_transcript", text=transcript or "(sin entender)")
+            self.resolve_confirm(confirm_id, approved)
             return
-        await self._send({"type": "user_transcript", "text": transcript})
-        reply = await self.ask(transcript)
-        await self._send({"type": "assistant", "text": reply})
+
+        if not transcript:
+            self._emit("assistant", text="No te he oído bien — ¿lo repites?")
+            self.set_mode("rest")
+            return
+        self._emit("user_transcript", text=transcript)
+        await self._answer(transcript)
+
+    async def chat_turn(self, text: str):
+        if self._awaiting_confirm_id:
+            confirm_id = self._awaiting_confirm_id
+            approved = bool(_YES_RE.match(text.strip()))
+            self.resolve_confirm(confirm_id, approved)
+            return
+        await self._answer(text)
+
+    async def _answer(self, text: str):
+        reply = await self.ask(text)
+        self._emit("assistant", text=reply)
         audio_b64 = await self.synthesize(reply)
         if audio_b64:
-            await self._send({
-                "type": "audio",
-                "data": audio_b64,
-                "sample_rate": self._tts.sample_rate,
-            })
+            self._emit("audio", data=audio_b64, sample_rate=self._tts.sample_rate)
         else:
-            await self._send({"type": "state", "value": "rest"})
+            self.set_mode("rest")
 
 
-async def _run_voice_turn(bridge: "Bridge", audio_bytes: bytes):
-    try:
-        await bridge.voice_turn(audio_bytes)
-    except Exception as e:  # a broken turn must never kill the socket
-        await bridge._send({"type": "error", "text": str(e)[:300]})
-
-
-async def _run_chat_turn(bridge: "Bridge", text: str):
-    try:
-        reply = await bridge.ask(text)
-        await bridge._send({"type": "assistant", "text": reply})
-    except Exception as e:
-        await bridge._send({"type": "error", "text": str(e)[:300]})
-
-
-async def handle_ws(request: web.Request):
-    ws = web.WebSocketResponse(max_msg_size=20 * 1024 * 1024)
-    await ws.prepare(request)
+async def handle_events(request: web.Request):
     bridge: Bridge = request.app["bridge"]
-    bridge.attach(ws)
+    since = int(request.query.get("since", 0))
+    return web.json_response({
+        "mode": bridge._mode,
+        "events": bridge.events_since(since),
+    })
 
-    # EVERY turn runs as its OWN task, never awaited inline here. A turn
-    # can take a minute or more (cold model loads, a permission question
-    # waiting on a person) — if this loop awaited it directly, no other
-    # frame on this same connection could be received meanwhile, which is
-    # exactly what silently deadlocked "answer by voice" against its own
-    # permission question (found live, by Rubén, on 2026-09-10): the
-    # gate's answer IS the next frame, and the loop couldn't reach it.
-    async for msg in ws:
-        if msg.type == WSMsgType.BINARY:
-            asyncio.create_task(_run_voice_turn(bridge, msg.data))
-            continue
 
-        if msg.type != WSMsgType.TEXT:
-            continue
-        try:
-            data = json.loads(msg.data)
-        except json.JSONDecodeError:
-            continue
+async def handle_voice(request: web.Request):
+    bridge: Bridge = request.app["bridge"]
+    audio_bytes = await request.read()
+    asyncio.create_task(_run_safely(bridge, bridge.voice_turn(audio_bytes)))
+    return web.json_response({"ok": True}, status=202)
 
-        if data.get("type") in ("chat", "greet"):
-            text = GREETING_PROMPT if data["type"] == "greet" else (data.get("text") or "").strip()
-            if text:
-                asyncio.create_task(_run_chat_turn(bridge, text))
 
-        elif data.get("type") == "confirm":
-            bridge.resolve_confirm(data.get("id"), bool(data.get("approved")))
+async def handle_chat(request: web.Request):
+    bridge: Bridge = request.app["bridge"]
+    try:
+        data = await request.json()
+    except json.JSONDecodeError:
+        return web.json_response({"error": "bad json"}, status=400)
+    if data.get("type") == "greet":
+        text = GREETING_PROMPT
+    else:
+        text = (data.get("text") or "").strip()
+    if not text:
+        return web.json_response({"ok": False}, status=400)
+    asyncio.create_task(_run_safely(bridge, bridge.chat_turn(text)))
+    return web.json_response({"ok": True}, status=202)
 
-    return ws
+
+async def _run_safely(bridge: Bridge, coro):
+    """A turn running as a background task (POST returns before it's
+    done — the result shows up via /events) must never vanish silently
+    on error."""
+    try:
+        await coro
+    except Exception as e:
+        bridge._emit("error", text=str(e)[:300])
+        bridge.set_mode("rest")
 
 
 async def make_app():
@@ -381,7 +374,9 @@ async def make_app():
     bridge = Bridge(HOME_DIR)
     await bridge.start()
     app["bridge"] = bridge
-    app.router.add_get("/ws", handle_ws)
+    app.router.add_get("/events", handle_events)
+    app.router.add_post("/voice", handle_voice)
+    app.router.add_post("/chat", handle_chat)
     app.router.add_static("/", FACE_DIR, show_index=False)
 
     async def on_cleanup(app):
