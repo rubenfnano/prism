@@ -1,0 +1,16 @@
+[project]
+name = "prism-voice"
+version = "0.1.0"
+description = "Motores de voz de PRISM (Whisper + Kokoro por defecto)"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "faster-whisper>=1.0.0",
+    "kokoro>=0.9.0",
+    "numpy>=1.26.0",
+]
+
+[tool.setuptools]
+packages = ["engines"]
+
+[tool.uv]
+package = false
