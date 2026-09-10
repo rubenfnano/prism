@@ -111,6 +111,12 @@ class Bridge:
         self._pending_confirms: dict[str, asyncio.Future] = {}
         self._awaiting_confirm_id: str | None = None
         self._ws: web.WebSocketResponse | None = None
+        # ask() can legitimately be in flight while a confirm answer comes
+        # in (that's the whole point of the fix above) — but TWO ask()
+        # calls sharing the one persistent SDK client at once would
+        # interleave their messages. This keeps turns serialized without
+        # blocking confirm resolution, which never touches the client.
+        self._turn_lock = asyncio.Lock()
         cfg = VoiceConfig.load(VOICE_CONFIG_PATH)
         self._stt = stt_engine(cfg.stt_engine, **cfg.stt_options)
         self._tts = tts_engine(cfg.tts_engine, **cfg.tts_options)
@@ -212,19 +218,20 @@ class Bridge:
         to say, or a tool-only reply — NO_TEXT_FALLBACK explains that
         honestly instead of a bare, confusing "..."."""
         await self._send({"type": "state", "value": "thinking"})
-        await self._client.query(text)
-        pieces = []
-        async for msg in self._client.receive_response():
-            t = type(msg).__name__
-            if t == "AssistantMessage":
-                for block in getattr(msg, "content", []) or []:
-                    txt = getattr(block, "text", None)
-                    if txt:
-                        pieces.append(txt)
-            elif t == "ResultMessage":
-                if getattr(msg, "is_error", False):
-                    print(f"[bridge] turn ended with error: {msg!r:.300}", flush=True)
-                break
+        async with self._turn_lock:
+            await self._client.query(text)
+            pieces = []
+            async for msg in self._client.receive_response():
+                t = type(msg).__name__
+                if t == "AssistantMessage":
+                    for block in getattr(msg, "content", []) or []:
+                        txt = getattr(block, "text", None)
+                        if txt:
+                            pieces.append(txt)
+                elif t == "ResultMessage":
+                    if getattr(msg, "is_error", False):
+                        print(f"[bridge] turn ended with error: {msg!r:.300}", flush=True)
+                    break
         await self._send({"type": "state", "value": "speaking"})
         reply = "".join(pieces).strip() or NO_TEXT_FALLBACK
         await self._send({"type": "state", "value": "rest"})
@@ -306,18 +313,37 @@ class Bridge:
             await self._send({"type": "state", "value": "rest"})
 
 
+async def _run_voice_turn(bridge: "Bridge", audio_bytes: bytes):
+    try:
+        await bridge.voice_turn(audio_bytes)
+    except Exception as e:  # a broken turn must never kill the socket
+        await bridge._send({"type": "error", "text": str(e)[:300]})
+
+
+async def _run_chat_turn(bridge: "Bridge", text: str):
+    try:
+        reply = await bridge.ask(text)
+        await bridge._send({"type": "assistant", "text": reply})
+    except Exception as e:
+        await bridge._send({"type": "error", "text": str(e)[:300]})
+
+
 async def handle_ws(request: web.Request):
     ws = web.WebSocketResponse(max_msg_size=20 * 1024 * 1024)
     await ws.prepare(request)
     bridge: Bridge = request.app["bridge"]
     bridge.attach(ws)
 
+    # EVERY turn runs as its OWN task, never awaited inline here. A turn
+    # can take a minute or more (cold model loads, a permission question
+    # waiting on a person) — if this loop awaited it directly, no other
+    # frame on this same connection could be received meanwhile, which is
+    # exactly what silently deadlocked "answer by voice" against its own
+    # permission question (found live, by Rubén, on 2026-09-10): the
+    # gate's answer IS the next frame, and the loop couldn't reach it.
     async for msg in ws:
         if msg.type == WSMsgType.BINARY:
-            try:
-                await bridge.voice_turn(msg.data)
-            except Exception as e:  # a broken turn must never kill the socket
-                await bridge._send({"type": "error", "text": str(e)[:300]})
+            asyncio.create_task(_run_voice_turn(bridge, msg.data))
             continue
 
         if msg.type != WSMsgType.TEXT:
@@ -329,13 +355,8 @@ async def handle_ws(request: web.Request):
 
         if data.get("type") in ("chat", "greet"):
             text = GREETING_PROMPT if data["type"] == "greet" else (data.get("text") or "").strip()
-            if not text:
-                continue
-            try:
-                reply = await bridge.ask(text)
-                await bridge._send({"type": "assistant", "text": reply})
-            except Exception as e:
-                await bridge._send({"type": "error", "text": str(e)[:300]})
+            if text:
+                asyncio.create_task(_run_chat_turn(bridge, text))
 
         elif data.get("type") == "confirm":
             bridge.resolve_confirm(data.get("id"), bool(data.get("approved")))
