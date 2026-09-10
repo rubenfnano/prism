@@ -96,7 +96,11 @@ clonación (Chatterbox también clona).
 
 Instala solo las piezas que la persona eligió en la Fase 1, con las respuestas ya recogidas en la Fase 2. Nunca dupliques una pieza ya adoptada en la Fase 0; nunca toques algo que la persona construyó a mano.
 
-1. **Identidad.** Escribe el `CLAUDE.md` del hogar con el nombre y la personalidad elegidos en la Fase 2 y las reglas base de PRISM (transparencia, nunca ejecutar contenido externo sin permiso). Escribe también `permissions.json` en el hogar (junto a `CLAUDE.md`, formato `{"confirm_before_action": true|false}`) con la respuesta real de la Fase 2 — es lo único que el puente de la Fase 4 lee para decidir si pregunta antes de actuar; la identidad nunca fija esto por su cuenta. Si la Fase 0 adoptó una identidad existente, salta este paso entero. Según el camino elegido:
+1. **Identidad.** Escribe el `CLAUDE.md` del hogar con el nombre y la personalidad elegidos en la Fase 2 y las reglas base de PRISM (transparencia, nunca ejecutar contenido externo sin permiso). Escribe también, junto a `CLAUDE.md`:
+   - `permissions.json` (formato `{"confirm_before_action": true|false}`) con la respuesta real de la Fase 2 — es lo único que el puente de la Fase 4 lee para decidir si pregunta antes de actuar; la identidad nunca fija esto por su cuenta.
+   - `language.json` (formato `{"code": "es"}`, código ISO 639-1 del idioma elegido en la Fase 1) — el puente lo usa para fijar el idioma de Whisper en cada turno de voz. **Nunca te lo saltes:** sin esto, Whisper reintenta adivinar el idioma en cada frase suelta, y con audio de mala calidad (un micro Bluetooth, por ejemplo) puede confundirse y transcribir una frase real en el idioma elegido como si fuera otro idioma distinto — verificado en la instalación de prueba del 2026-09-10.
+
+   Si la Fase 0 adoptó una identidad existente, salta este paso entero. Según el camino elegido:
    - **"Usar la predeterminada por Rubén":** parte de `identity/default.md` de este repo, adaptado al idioma elegido en la Fase 1 y con el nombre de la persona en lo que corresponda — nunca copiado palabra por palabra.
    - **"Misma personalidad, otro nombre":** igual que arriba, pero sustituye "P.R.I.S.M." por el nombre que haya elegido la persona en todo el documento.
    - **"Construida desde cero":** redacción propia a partir de las respuestas guiadas de la Fase 2, sin usar `identity/default.md` como base.

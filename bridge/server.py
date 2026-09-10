@@ -72,6 +72,7 @@ from voice import VoiceConfig, stt_engine, tts_engine  # noqa: E402
 FACE_DIR = HOME_DIR / "cara"
 VOICE_CONFIG_PATH = HOME_DIR / "voice" / "voice.json"
 PERMISSIONS_PATH = HOME_DIR / "permissions.json"
+LANGUAGE_PATH = HOME_DIR / "language.json"
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8793
 
 GREETING_PROMPT = (
@@ -149,6 +150,20 @@ class Bridge:
         cfg = VoiceConfig.load(VOICE_CONFIG_PATH)
         self._stt = stt_engine(cfg.stt_engine, **cfg.stt_options)
         self._tts = tts_engine(cfg.tts_engine, **cfg.tts_options)
+        # The Fase 1 language answer, written to language.json in the
+        # Fase 3 "Identidad" step. Without it, Whisper re-guesses the
+        # language on every short clip independently — on noisy audio
+        # (a Bluetooth headset mic, say) that guess flips, and a real
+        # Spanish sentence comes back transcribed as unrelated English
+        # (found live, by Rubén, 2026-09-10: he said "¿qué puedes
+        # hacer?", it heard "Thank you"). Pinning the language this
+        # install was set up in removes that whole failure mode.
+        try:
+            self._language = json.loads(
+                LANGUAGE_PATH.read_text(encoding="utf-8")
+            ).get("code") or None
+        except (OSError, json.JSONDecodeError):
+            self._language = None
         # Fase 2's Permisos answer, written to permissions.json in the
         # Fase 3 "Identidad" step. Missing file = the safer default:
         # confirm before acting, same as an unanswered question would.
@@ -282,7 +297,7 @@ class Bridge:
         pcm, rate = await loop.run_in_executor(None, decode_audio, audio_bytes)
         if pcm.size == 0:
             return ""
-        return await loop.run_in_executor(None, self._stt.transcribe, pcm, rate)
+        return await loop.run_in_executor(None, self._stt.transcribe, pcm, rate, self._language)
 
     async def synthesize(self, text: str) -> str | None:
         """Returns a base64 WAV, or None if there's nothing worth saying
