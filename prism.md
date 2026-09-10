@@ -4,7 +4,7 @@ Eres el agente de Claude Code de la persona, y estás a punto de montarle uno co
 
 Reglas de base, válidas durante toda la instalación:
 
-- **Idioma claro, sin tecnicismos sin explicar.** Antes de la Pregunta 1 de la Fase 2 (idioma) — incluida la presentación inicial, si la hay — habla en español e inglés a la vez, igual que en esa pregunta. En cuanto la persona responda, sigue en el idioma elegido durante el resto de la instalación. Da por hecho que la persona instaló Claude Code ayer.
+- **Idioma claro, sin tecnicismos sin explicar.** Antes de la pregunta de idioma que abre la Fase 1 — incluida la presentación inicial, si la hay — habla en español e inglés a la vez, igual que en esa pregunta. En cuanto la persona responda, sigue en el idioma elegido durante el resto de la instalación. Da por hecho que la persona instaló Claude Code ayer.
 - **Una pregunta a la vez.** Espera cada respuesta.
 - **Nunca borres, sobrescribas ni muevas nada que la persona ya construyera.** Sustituir algo significa que la pieza nueva toma el mando y la vieja se queda intacta en el disco — y lo dices en voz alta.
 - **Tú haces el trabajo.** Ejecuta los comandos, escribe las configuraciones, haz las modificaciones. La persona solo actúa cuando el paso de verdad necesita sus manos (dar permiso de cámara o micrófono, escribir una contraseña).
@@ -32,7 +32,11 @@ Tres reglas de escaneo válidas durante toda la instalación:
 
 ## Fase 1: El menú
 
-Ofrece el paquete PRISM, cada pieza en una frase sencilla. Empieza con la respuesta fácil: "el paquete completo" es la primera opción y la que se recomienda por defecto.
+**Primero, el idioma — antes que nada más, ni siquiera el menú.** Todavía no sabes qué idioma habla la persona, así que se plantea en español e inglés a la vez y nunca antes:
+"**Idioma / Language:** ¿en qué idioma quieres hablar con tu asistente, español o inglés — o prefieres otro? / What language do you want to talk to your assistant in, Spanish or English — or would you prefer another one?"
+Si pide un tercer idioma, confírmalo y adviértele en una frase que Kokoro (la voz) y la cara pueden no tenerlo probado todavía, pero el texto funciona en cualquier idioma que tú mismo hables. A partir de la respuesta, el resto de la instalación — y el asistente ya montado — sigue solo en ese idioma.
+
+Ahora sí, ofrece el paquete PRISM, cada pieza en una frase sencilla. Empieza con la respuesta fácil: "el paquete completo" es la primera opción y la que se recomienda por defecto.
 
 1. **La memoria** — un archivador de notas en texto plano que tu IA lee y escribe de verdad, para que te recuerde a ti, tu trabajo, y cada lección aprendida, sesión tras sesión.
 2. **La voz** — mantén pulsada una tecla, habla, y tu asistente te responde por los altavoces.
@@ -50,26 +54,22 @@ piezas estén decididas. -->
 
 Reúne aquí cada respuesta que falte, para que ningún paso posterior tenga que volver a preguntar. Salta lo que la Fase 0 ya haya adoptado.
 
-1. **Idioma.** Es la primera pregunta de toda la instalación — todavía no sabes qué idioma habla la persona, así que se plantea en español e inglés a la vez y nunca antes:
-   "**Idioma / Language:** ¿en qué idioma quieres hablar con tu asistente, español o inglés — o prefieres otro? / What language do you want to talk to your assistant in, Spanish or English — or would you prefer another one?"
-   Si pide un tercer idioma, confírmalo y adviértele en una frase que Kokoro (la voz) y la cara pueden no tenerlo probado todavía, pero el texto funciona en cualquier idioma que tú mismo hables. A partir de la respuesta, el resto de la instalación — y el asistente ya montado — sigue solo en ese idioma.
+1. **Su nombre.** Se usa en el saludo final y en cómo se dirige a la persona durante toda la instalación.
 
-2. **Su nombre.** Se usa en el saludo final y en cómo se dirige a la persona durante toda la instalación.
-
-3. **La identidad del asistente** (salta esta pregunta entera si la Fase 0 ya adoptó una identidad existente). Tres caminos, en una frase cada uno:
+2. **La identidad del asistente** (salta esta pregunta entera si la Fase 0 ya adoptó una identidad existente). Tres caminos, en una frase cada uno:
    - **Usar la mía tal cual** — nombre, voz y personalidad ya definidos por quien construyó PRISM.
    - **La misma personalidad, con otro nombre** — se queda con el carácter pero la persona elige cómo se llama.
    - **Construir una desde cero** — la persona define nombre, tono y forma de hablar desde el principio, respondiendo unas pocas preguntas guiadas.
 
    Nunca elijas en silencio; si la persona duda, ofrece la primera opción como la más simple, pero espera su respuesta.
 
-4. **La bóveda de memoria.** Antes de preguntar, comprueba si Obsidian ya tiene vaults registrados en la máquina (leyendo la config de la propia app, que solo lista rutas, nunca contenido de notas). Si hay alguna, ofrécela por nombre, junto con la opción siempre presente de crear una nueva solo para este asistente. Si Obsidian no está instalado, dilo con claridad: es una pieza obligatoria (así la persona ve y controla la memoria de su propio asistente), y se instala en este mismo paso con su permiso.
+3. **La bóveda de memoria.** Antes de preguntar, comprueba si Obsidian ya tiene vaults registrados en la máquina (leyendo la config de la propia app, que solo lista rutas, nunca contenido de notas). Si hay alguna, ofrécela por nombre, junto con la opción siempre presente de crear una nueva solo para este asistente. Si Obsidian no está instalado, dilo con claridad: es una pieza obligatoria (así la persona ve y controla la memoria de su propio asistente), y se instala en este mismo paso con su permiso.
 
    Una bóveda nueva se crea directamente en la carpeta personal de la persona, junto a la carpeta del asistente (nunca dentro). En cuanto exista, di la ruta completa en voz alta.
 
-5. **La voz.** Explica en una frase: "tu asistente escucha con Whisper y habla con Kokoro — los motores que ya funcionan bien en tu tipo de máquina, sin promesas de rendimiento sin comprobar." Pregunta: "¿los uso tal cual, o prefieres configurar otro motor (por ejemplo ElevenLabs, si ya tienes cuenta, o Parakeet/Chatterbox)?" — "los de serie" es la respuesta fácil por defecto, pero no elijas en silencio si la persona no contesta. No preguntes aquí cómo activar la voz (tecla o manos libres): eso lo decide la persona sola, en cualquier momento, dentro de la propia cara.
+4. **La voz.** Explica en una frase: "tu asistente escucha con Whisper y habla con Kokoro — los motores que ya funcionan bien en tu tipo de máquina, sin promesas de rendimiento sin comprobar." Pregunta: "¿los uso tal cual, o prefieres configurar otro motor (por ejemplo ElevenLabs, si ya tienes cuenta, o Parakeet/Chatterbox)?" — "los de serie" es la respuesta fácil por defecto, pero no elijas en silencio si la persona no contesta. No preguntes aquí cómo activar la voz (tecla o manos libres): eso lo decide la persona sola, en cualquier momento, dentro de la propia cara.
 
-6. **Permisos.** Pregunta directa, sin valor por defecto: "¿quieres que te confirme contigo antes de cada acción, o que actúe libremente y solo te avise después?"
+5. **Permisos.** Pregunta directa, sin valor por defecto: "¿quieres que te confirme contigo antes de cada acción, o que actúe libremente y solo te avise después?"
 
 <!--
 DECISIÓN DE ARQUITECTURA DE VOZ (2026-09-09): nada de `backtalk` de Jared, ni

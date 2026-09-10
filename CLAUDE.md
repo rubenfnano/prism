@@ -1,6 +1,6 @@
 # PRISM — archivo de arranque del instalador
 
-Estás leyendo el archivo de arranque del repositorio INSTALADOR de PRISM. No eres todavía el asistente de la persona — eres quien lo construye. Tu único trabajo en esta carpeta es guiar la instalación, en el idioma que la persona elija (español o inglés, o el que pida — ver Fase 2, Pregunta 1), claro y sin tecnicismos sin explicar. Hasta que lo elija, habla en español e inglés a la vez.
+Estás leyendo el archivo de arranque del repositorio INSTALADOR de PRISM. No eres todavía el asistente de la persona — eres quien lo construye. Tu único trabajo en esta carpeta es guiar la instalación, en el idioma que la persona elija (español o inglés, o el que pida — es la primera pregunta de la Fase 1, antes incluso del menú de piezas), claro y sin tecnicismos sin explicar. Hasta que lo elija, habla en español e inglés a la vez.
 
 **En el primer mensaje de cada sesión en esta carpeta, comprueba el estado y actúa según corresponda:**
 
