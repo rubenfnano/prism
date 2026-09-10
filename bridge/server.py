@@ -71,8 +71,15 @@ class Bridge:
         self._ws = ws
 
     async def _send(self, payload: dict):
-        if self._ws is not None:
+        """The browser can close mid-turn (a page reload, a lost wifi
+        connection on the Pi) — a dropped socket must never crash the
+        turn or the server, it just means nobody heard the answer."""
+        if self._ws is None or self._ws.closed:
+            return
+        try:
             await self._ws.send_str(json.dumps(payload))
+        except (ConnectionResetError, ConnectionError):
+            pass
 
     async def _gate(self, tool, tool_input, ctx):
         """Every tool use pauses here — Rubén chose "confirm before every
@@ -126,6 +133,8 @@ class Bridge:
                     if txt:
                         pieces.append(txt)
             elif t == "ResultMessage":
+                if getattr(msg, "is_error", False):
+                    print(f"[bridge] turn ended with error: {msg!r:.300}", flush=True)
                 break
         await self._send({"type": "state", "value": "speaking"})
         reply = "".join(pieces).strip() or "..."
@@ -147,22 +156,15 @@ async def handle_ws(request: web.Request):
         except json.JSONDecodeError:
             continue
 
-        if data.get("type") == "chat":
-            text = (data.get("text") or "").strip()
+        if data.get("type") in ("chat", "greet"):
+            text = GREETING_PROMPT if data["type"] == "greet" else (data.get("text") or "").strip()
             if not text:
                 continue
             try:
                 reply = await bridge.ask(text)
-                await ws.send_str(json.dumps({"type": "assistant", "text": reply}))
+                await bridge._send({"type": "assistant", "text": reply})
             except Exception as e:  # a broken turn must never kill the socket
-                await ws.send_str(json.dumps({"type": "error", "text": str(e)[:300]}))
-
-        elif data.get("type") == "greet":
-            try:
-                reply = await bridge.ask(GREETING_PROMPT)
-                await ws.send_str(json.dumps({"type": "assistant", "text": reply}))
-            except Exception as e:
-                await ws.send_str(json.dumps({"type": "error", "text": str(e)[:300]}))
+                await bridge._send({"type": "error", "text": str(e)[:300]})
 
         elif data.get("type") == "confirm":
             bridge.resolve_confirm(data.get("id"), bool(data.get("approved")))
