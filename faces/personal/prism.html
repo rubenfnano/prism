@@ -138,7 +138,7 @@ class Component extends DCLogic {
         this.pick('thinking');
         this.stopRecordingAndSend();
         // whatever comes back (audio or a text-only reply) restarts the
-        // next cycle from playReply()'s "ended" handler, or from the
+        // next cycle from playStream()'s _streamEnded(), or from the
         // assistant-message fallback timer below if no audio arrives.
       }, 3500);
     };
@@ -351,8 +351,10 @@ class Component extends DCLogic {
     } else if (msg.type === 'state') {
       this.pick(msg.value);
       if (msg.value === 'rest') this._openBubble = null;
-    } else if (msg.type === 'audio') {
-      this.queueAudio(msg.id);
+    } else if (msg.type === 'audio_stream') {
+      // informational only — the stream itself is already being read by
+      // now (playStream() opens /audio_stream right after the turn is
+      // submitted, not on a poll cycle's delay)
     } else if (msg.type === 'error') {
       console.error('[prism] bridge error:', msg.text);
       this.addMessage('assistant', T.bridgeError + ': ' + msg.text);
@@ -399,54 +401,66 @@ class Component extends DCLogic {
   stopRecordingAndSend() {
     if (!this.bridgeReady) { this.pick('rest'); return; }
     const url = this.uiMode === 'live' ? '/voice/stop?trim=1' : '/voice/stop';
-    fetch(url, { method: 'POST' }).catch(() => {
+    fetch(url, { method: 'POST' }).then(() => this.playStream()).catch(() => {
       if (this.mode === 'listening' || this.mode === 'thinking') this.pick('rest');
     });
   }
 
-  // Sentences arrive (and finish synthesizing) one at a time now, not as
-  // a single clip for the whole reply — queued and played back to back,
-  // so a later sentence never interrupts one still playing. The clip
-  // itself is fetched on demand from /audio/<id>, NOT embedded as base64
-  // in the polled JSON — a big base64 string in every /events response
-  // was blocking long enough to freeze/stutter the tetraedro's own
-  // render loop (found live, by Rubén, 2026-09-10).
-  queueAudio(audioId) {
+  // Real-time audio streaming (2026-09-10, replacing one-clip-at-a-time
+  // WAV-over-HTTP): opened the INSTANT a voice turn is submitted, not on
+  // a poll cycle's delay — raw int16 PCM arrives as Kokoro generates it
+  // and gets scheduled back-to-back on a Web Audio API timeline, so
+  // playback starts as soon as the first chunk exists rather than
+  // waiting for a whole clip (or the whole reply) to finish synthesizing
+  // first. The step toward an actual live conversation, Rubén's goal.
+  async playStream() {
     clearTimeout(this._liveContinueTimer);
-    if (!this._audioQueue) this._audioQueue = [];
-    this._audioQueue.push(audioId);
-    if (!this._playingAudio) this._playNextAudio();
+    if (!this._audioCtx) this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = this._audioCtx;
+    if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) {} }
+    const sampleRate = 24000; // Kokoro's fixed output rate
+    let nextTime = ctx.currentTime;
+    let scheduled = 0;
+    let leftover = new Uint8Array(0);
+    let res;
+    try {
+      res = await fetch('/audio_stream');
+    } catch (e) { this._streamEnded(); return; }
+    if (!res.ok || !res.body) { this._streamEnded(); return; }
+    const reader = res.body.getReader();
+    while (true) {
+      let done, value;
+      try { ({ done, value } = await reader.read()); } catch (e) { break; }
+      if (done) break;
+      if (!value || !value.length) continue;
+      if (scheduled === 0) this.pick('speaking');
+      const buf = new Uint8Array(leftover.length + value.length);
+      buf.set(leftover, 0);
+      buf.set(value, leftover.length);
+      const usable = buf.length - (buf.length % 2); // int16 = 2 bytes
+      leftover = buf.slice(usable);
+      if (usable === 0) continue;
+      const int16 = new Int16Array(buf.buffer.slice(0, usable));
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+      const audioBuffer = ctx.createBuffer(1, float32.length, sampleRate);
+      audioBuffer.getChannelData(0).set(float32);
+      const src = ctx.createBufferSource();
+      src.buffer = audioBuffer;
+      src.connect(ctx.destination);
+      const startAt = Math.max(nextTime, ctx.currentTime);
+      src.start(startAt);
+      nextTime = startAt + audioBuffer.duration;
+      scheduled++;
+    }
+    if (scheduled === 0) { this._streamEnded(); return; }
+    const waitMs = Math.max(0, (nextTime - ctx.currentTime) * 1000) + 50;
+    setTimeout(() => this._streamEnded(), waitMs);
   }
 
-  async _playNextAudio() {
-    const nextId = this._audioQueue && this._audioQueue.shift();
-    if (nextId == null) {
-      this._playingAudio = false;
-      // the server's own 'state: rest' usually arrives WHILE the last
-      // queued clip is still playing (synthesis finishes before
-      // playback does) — without this, the visualizer stayed frozen on
-      // "speaking"/"thinking" once the queue actually drained (found
-      // live, by Rubén, 2026-09-10).
-      if (this.uiMode === 'live' && this.mode !== 'thinking') this.liveCycle();
-      else if (this.uiMode !== 'live') this.pick('rest');
-      return;
-    }
-    this._playingAudio = true;
-    this.pick('speaking');
-    let url;
-    try {
-      const res = await fetch('/audio/' + nextId);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const blob = await res.blob();
-      url = URL.createObjectURL(blob);
-    } catch (e) {
-      this._playNextAudio();
-      return;
-    }
-    const audio = new Audio(url);
-    const cleanup = () => { URL.revokeObjectURL(url); this._playNextAudio(); };
-    audio.addEventListener('ended', cleanup);
-    audio.play().catch(cleanup);
+  _streamEnded() {
+    if (this.uiMode === 'live' && this.mode !== 'thinking') this.liveCycle();
+    else if (this.uiMode !== 'live') this.pick('rest');
   }
 
   sendToBridge(text) {

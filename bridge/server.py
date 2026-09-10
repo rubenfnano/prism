@@ -35,7 +35,12 @@ Endpoints:
                              /events, same as everything else.
   POST /chat    ({"text": "..."} or {"type": "greet"})
                              a typed turn, same background-then-poll
-                             shape as voice.
+                             shape as voice. Text never speaks.
+  GET  /audio_stream        raw int16 PCM for the CURRENT voice turn,
+                             streamed live as Kokoro generates it — the
+                             face opens this the instant it submits a
+                             voice turn, doesn't wait for a poll to
+                             find out there's something to hear.
   GET  /                    the face, served as static files.
 
 Permission handling mirrors backtalk's spoken gate (brain.py /
@@ -48,13 +53,11 @@ socket-specific.
 from __future__ import annotations
 
 import asyncio
-import io
 import itertools
 import json
 import re
 import sys
 import uuid
-import wave
 from pathlib import Path
 
 import numpy as np
@@ -92,7 +95,6 @@ NO_TEXT_FALLBACK = (
     "la acción se haya denegado o cancelado a mitad de camino."
 )
 CONFIRM_TIMEOUT_S = 120
-SPEAK_BATCH_CHARS = 80  # synthesize roughly this many characters at a time
 SAMPLE_RATE = 16000
 VAD_FRAME_MS = 30
 VAD_FRAME_SAMPLES = SAMPLE_RATE * VAD_FRAME_MS // 1000  # 480
@@ -147,17 +149,6 @@ def trim_to_speech(pcm: np.ndarray, aggressiveness: int = 2) -> np.ndarray:
     return pcm[start:end]
 
 
-def pcm_to_wav(chunks: list[np.ndarray], sample_rate: int) -> bytes:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)  # int16
-        wf.setframerate(sample_rate)
-        for chunk in chunks:
-            wf.writeframes(chunk.tobytes())
-    return buf.getvalue()
-
-
 class Bridge:
     """One persistent SDK session per server process — a single-user
     assistant, same assumption backtalk makes. Also owns the STT/TTS
@@ -191,13 +182,13 @@ class Bridge:
         # single-user assumption as everything else here.
         self._record_stream: sd.InputStream | None = None
         self._recording_frames: list[np.ndarray] | None = None
-        # Synthesized clips, keyed by the 'audio' event's own id — kept
-        # OUT of the polled JSON (see synthesize()/handle_audio below):
-        # embedding a big base64 string in every /events response was
-        # blocking the face's render loop long enough to freeze/stutter
-        # the tetraedro (found live, by Rubén, 2026-09-10). A handful of
-        # recent clips is all a single-user session ever needs at once.
-        self._audio_store: dict[int, bytes] = {}
+        # The CURRENT turn's audio, as a live stream — never embedded in
+        # the polled JSON (a base64 WAV there once blocked the face's own
+        # render loop long enough to freeze/stutter the tetraedro, found
+        # live 2026-09-10) and, since the 2026-09-10 streaming rewrite,
+        # never even fully buffered before the browser can hear it: see
+        # stream_speak() / handle_audio_stream.
+        self._audio_stream_queue: asyncio.Queue | None = None
         cfg = VoiceConfig.load(VOICE_CONFIG_PATH)
         self._stt = stt_engine(cfg.stt_engine, **cfg.stt_options)
         self._tts = tts_engine(cfg.tts_engine, **cfg.tts_options)
@@ -449,20 +440,24 @@ class Bridge:
         audio_f32 = pcm.astype(np.float32) / 32768.0
         return await loop.run_in_executor(None, self._stt.transcribe, audio_f32, SAMPLE_RATE, self._language)
 
-    async def synthesize(self, text: str) -> bytes | None:
-        """Returns raw WAV bytes, or None if there's nothing worth saying
-        (an empty reply shouldn't play silence). Callers store the
-        result under an event id (see _answer) — the bytes never go
-        through the polled JSON directly."""
+    async def stream_speak(self, text: str, queue: asyncio.Queue) -> None:
+        """Pushes raw int16 PCM chunks onto queue AS Kokoro generates
+        them — not after synthesis of a whole sentence-batch finishes.
+        Real-time streaming, the step toward an actual live
+        conversation (Rubén's goal, 2026-09-10): each chunk crosses
+        into the event loop the moment it exists, so /audio_stream can
+        write it to the browser essentially as it's spoken, instead of
+        the whole clip waiting for `list(self._tts.synthesize(...))` to
+        finish before ANY of it goes out."""
         if not text.strip():
-            return None
+            return
         loop = asyncio.get_running_loop()
-
-        def _run():
-            chunks = list(self._tts.synthesize(text))
-            return pcm_to_wav(chunks, self._tts.sample_rate)
-
-        return await loop.run_in_executor(None, _run)
+        gen = self._tts.synthesize(text)
+        while True:
+            chunk = await loop.run_in_executor(None, lambda: next(gen, None))
+            if chunk is None:
+                break
+            await queue.put(chunk.tobytes())
 
     async def voice_turn(self, pcm: np.ndarray):
         """The full voice pipeline for one recording: transcribe -> a
@@ -495,29 +490,22 @@ class Bridge:
             return
         await self._answer(text, via_voice=False)
 
-    async def _emit_audio(self, text: str) -> None:
-        wav = await self.synthesize(text)
-        if not wav:
-            return
-        event = self._emit("audio", sample_rate=self._tts.sample_rate)
-        self._audio_store[event["id"]] = wav
-        # a handful of recent clips is plenty for one live session
-        if len(self._audio_store) > 20:
-            for old_id in sorted(self._audio_store)[:-20]:
-                del self._audio_store[old_id]
-
     async def _answer(self, text: str, via_voice: bool = False):
         """Speaks and shows text as soon as Claude finishes each sentence
         — NOT the whole reply at once. 'assistant_chunk' events append to
         the same chat bubble client-side; a bare 'assistant' event only
         happens for the empty-reply fallback, a genuine one-shot message.
 
-        Sentence-by-sentence TEXT, but AUDIO is batched a couple of
-        sentences at a time (SPEAK_BATCH_CHARS) — one clip per single
-        short sentence sounded choppy (found live, by Rubén,
-        2026-09-10): every clip boundary is an audible seam, and short
-        sentences meant a lot of them. Batching trades a little of the
-        latency win for noticeably smoother speech.
+        Real-time audio streaming (2026-09-10, replacing WAV-over-HTTP):
+        a fresh asyncio.Queue is opened as THE stream for this turn — the
+        face is expected to already be reading /audio_stream by the time
+        this runs (it opens that fetch right after submitting the voice
+        turn, before waiting on any poll). Chunks land in the queue as
+        Kokoro produces them (stream_speak), sentence by sentence, with
+        no batching: the WAV-batching-for-smoothness compromise doesn't
+        apply here since real streaming has no per-clip HTTP/decode seam
+        to smooth over in the first place. Typed chat never opens a
+        queue — text stays silent, same as before.
 
         via_voice tags what's actually SENT to Claude (never the
         displayed transcript) with a short marker — otherwise a spoken
@@ -529,17 +517,19 @@ class Bridge:
             f"conversación real — dos o tres frases, no una charla entera; si hace falta "
             f"más detalle, dilo y ofrece seguir por texto] {text}"
         ) if via_voice else text
+        queue: asyncio.Queue | None = None
+        if via_voice:
+            queue = asyncio.Queue()
+            self._audio_stream_queue = queue
+            self._emit("audio_stream", sample_rate=self._tts.sample_rate)
         said_anything = False
-        audio_buf = ""
         async for sentence in self.ask_stream(prompt):
             said_anything = True
             self._emit("assistant_chunk", text=sentence)
-            audio_buf = f"{audio_buf} {sentence}".strip()
-            if len(audio_buf) >= SPEAK_BATCH_CHARS:
-                await self._emit_audio(audio_buf)
-                audio_buf = ""
-        if audio_buf:
-            await self._emit_audio(audio_buf)
+            if queue is not None:
+                await self.stream_speak(sentence, queue)
+        if queue is not None:
+            await queue.put(None)  # tells /audio_stream this turn is done
         if not said_anything:
             self._emit("assistant", text=NO_TEXT_FALLBACK)
         self.set_mode("rest")
@@ -554,16 +544,36 @@ async def handle_events(request: web.Request):
     })
 
 
-async def handle_audio(request: web.Request):
+async def handle_audio_stream(request: web.Request):
+    """Raw int16 PCM, mono, streamed live as the CURRENT turn's queue
+    fills — no WAV container (that needs a byte count up front, which a
+    live stream doesn't have) and no wait for the whole reply. The face
+    opens this immediately after submitting a voice turn, before the
+    turn has even started answering; whatever's in the queue by the
+    time this connects is exactly what it plays, in order."""
     bridge: Bridge = request.app["bridge"]
-    try:
-        audio_id = int(request.match_info["id"])
-    except ValueError:
-        return web.Response(status=400)
-    wav = bridge._audio_store.get(audio_id)
-    if wav is None:
-        return web.Response(status=404)
-    return web.Response(body=wav, content_type="audio/wav")
+    resp = web.StreamResponse(headers={"Content-Type": "application/octet-stream"})
+    await resp.prepare(request)
+    # The face opens this the instant it submits a voice turn — often
+    # microseconds before _answer() has actually created this turn's
+    # queue. Give it a moment to show up rather than closing empty.
+    queue = bridge._audio_stream_queue
+    waited = 0.0
+    while queue is None and waited < 3.0:
+        await asyncio.sleep(0.03)
+        waited += 0.03
+        queue = bridge._audio_stream_queue
+    if queue is not None:
+        while True:
+            chunk = await queue.get()
+            if chunk is None:
+                break
+            try:
+                await resp.write(chunk)
+            except (ConnectionResetError, ConnectionError):
+                break
+    await resp.write_eof()
+    return resp
 
 
 async def handle_voice_start(request: web.Request):
@@ -614,7 +624,7 @@ async def make_app():
     await bridge.start()
     app["bridge"] = bridge
     app.router.add_get("/events", handle_events)
-    app.router.add_get("/audio/{id}", handle_audio)
+    app.router.add_get("/audio_stream", handle_audio_stream)
     app.router.add_post("/voice/start", handle_voice_start)
     app.router.add_post("/voice/stop", handle_voice_stop)
     app.router.add_post("/chat", handle_chat)
