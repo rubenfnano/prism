@@ -25,6 +25,7 @@ import asyncio
 import base64
 import io
 import json
+import re
 import sys
 import uuid
 import wave
@@ -39,11 +40,15 @@ from claude_agent_sdk import (
     PermissionResultDeny,
 )
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "voice"))
-from config import VoiceConfig  # noqa: E402
-from registry import stt_engine, tts_engine  # noqa: E402
-
 HOME_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
+
+# voice/ has its own __init__.py (a real package, for its relative
+# imports like `from .engines.stt.base import ...` to work) — so the
+# home dir goes on the path, and it's imported AS a package, never
+# voice's internals imported standalone.
+sys.path.insert(0, str(HOME_DIR))
+from voice import VoiceConfig, stt_engine, tts_engine  # noqa: E402
+
 FACE_DIR = HOME_DIR / "cara"
 VOICE_CONFIG_PATH = HOME_DIR / "voice" / "voice.json"
 PERMISSIONS_PATH = HOME_DIR / "permissions.json"
@@ -59,6 +64,7 @@ NO_TEXT_FALLBACK = (
 )
 CONFIRM_TIMEOUT_S = 120
 WHISPER_SAMPLE_RATE = 16000
+_YES_RE = re.compile(r"^\s*(s(í|i)|claro|vale|yes|ok)\b", re.IGNORECASE)
 
 
 def decode_audio(data: bytes) -> tuple[np.ndarray, int]:
@@ -103,6 +109,7 @@ class Bridge:
         self.home_dir = home_dir
         self._client: ClaudeSDKClient | None = None
         self._pending_confirms: dict[str, asyncio.Future] = {}
+        self._awaiting_confirm_id: str | None = None
         self._ws: web.WebSocketResponse | None = None
         cfg = VoiceConfig.load(VOICE_CONFIG_PATH)
         self._stt = stt_engine(cfg.stt_engine, **cfg.stt_options)
@@ -159,6 +166,10 @@ class Bridge:
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
         self._pending_confirms[confirm_id] = fut
+        # tracked so a VOICE turn (not just typed chat) can answer this —
+        # single pending confirm at a time, same single-user assumption
+        # as the rest of the bridge
+        self._awaiting_confirm_id = confirm_id
         what = f"usar {tool}"
         if isinstance(tool_input, dict) and tool_input.get("command"):
             what = f"ejecutar: {tool_input['command'][:200]}"
@@ -173,6 +184,8 @@ class Bridge:
             approved = await asyncio.wait_for(fut, CONFIRM_TIMEOUT_S)
         except asyncio.TimeoutError:
             self._pending_confirms.pop(confirm_id, None)
+            if self._awaiting_confirm_id == confirm_id:
+                self._awaiting_confirm_id = None
             return PermissionResultDeny(
                 behavior="deny",
                 message="No hubo respuesta a tiempo; la acción no se aprobó.",
@@ -187,6 +200,8 @@ class Bridge:
         )
 
     def resolve_confirm(self, confirm_id: str, approved: bool):
+        if self._awaiting_confirm_id == confirm_id:
+            self._awaiting_confirm_id = None
         fut = self._pending_confirms.pop(confirm_id, None)
         if fut and not fut.done():
             fut.set_result(approved)
@@ -235,14 +250,41 @@ class Bridge:
 
         return await loop.run_in_executor(None, _run)
 
+    async def voice_confirm_turn(self, audio_bytes: bytes):
+        """A permission question is waiting for an answer — a PTT/live
+        recording right now means "sí" or "no", not a new question.
+        Without this, the question only ever showed in the chat panel,
+        which isn't even on screen in ptt/live mode: the gate would sit
+        there for the full CONFIRM_TIMEOUT_S with no way to answer it by
+        voice at all (found live, by Rubén, on 2026-09-10)."""
+        confirm_id = self._awaiting_confirm_id
+        await self._send({"type": "state", "value": "thinking"})
+        transcript = await self.transcribe(audio_bytes)
+        if not confirm_id or confirm_id not in self._pending_confirms:
+            # answered or timed out while transcribing — fall through to
+            # a normal turn instead of silently dropping what was said
+            await self._send({"type": "state", "value": "rest"})
+            if transcript:
+                await self.voice_turn_from_transcript(transcript)
+            return
+        approved = bool(_YES_RE.match(transcript.strip())) if transcript else False
+        await self._send({"type": "user_transcript", "text": transcript or "(sin entender)"})
+        self.resolve_confirm(confirm_id, approved)
+
     async def voice_turn(self, audio_bytes: bytes):
         """The full voice pipeline for one recording: transcribe -> the
         same ask() a typed message goes through -> speak the reply back.
         The transcript is sent to the browser too, so voice and chat
         share one transcript (the same design the face already had for
         its demo turns) — it's just real now."""
+        if self._awaiting_confirm_id:
+            await self.voice_confirm_turn(audio_bytes)
+            return
         await self._send({"type": "state", "value": "thinking"})
         transcript = await self.transcribe(audio_bytes)
+        await self.voice_turn_from_transcript(transcript)
+
+    async def voice_turn_from_transcript(self, transcript: str):
         if not transcript:
             await self._send({
                 "type": "assistant",
