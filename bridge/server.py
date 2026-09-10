@@ -486,7 +486,11 @@ class Bridge:
         turn looks identical to a typed one on Claude's side, and asking
         "¿me estás escuchando?" out loud got answered as if nothing had
         been heard at all (found live, by Rubén, 2026-09-10)."""
-        prompt = f"[Te acaba de hablar por voz, no escribir] {text}" if via_voice else text
+        prompt = (
+            f"[Te acaba de hablar por voz, no escribir. Responde breve, como en una "
+            f"conversación real — dos o tres frases, no una charla entera; si hace falta "
+            f"más detalle, dilo y ofrece seguir por texto] {text}"
+        ) if via_voice else text
         said_anything = False
         audio_buf = ""
         async for sentence in self.ask_stream(prompt):
