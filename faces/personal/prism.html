@@ -277,6 +277,8 @@ class Component extends DCLogic {
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (msg.type === 'assistant') {
         this.addMessage('assistant', msg.text);
+        this.pendingConfirmId = null;
+        if (this.toastEl) this.toastEl.style.opacity = '0';
         if (this.uiMode === 'live') {
           // if audio follows, its own "ended" handler drives the next
           // cycle and cancels this; if this reply had no audio (an empty
@@ -292,6 +294,9 @@ class Component extends DCLogic {
       } else if (msg.type === 'confirm_request') {
         this.pendingConfirmId = msg.id;
         this.addMessage('assistant', msg.question);
+        // visible in EVERY mode, not just chat — a voice turn while this
+        // is up answers it directly now (see server: voice_confirm_turn)
+        this.showToast(msg.question, true);
         this.pick('rest');
       } else if (msg.type === 'state') {
         this.pick(msg.value);
@@ -315,17 +320,21 @@ class Component extends DCLogic {
     const rec = new MediaRecorder(stream);
     rec.__chunks = [];
     rec.ondataavailable = (e) => { if (e.data.size) rec.__chunks.push(e.data); };
+    rec.onerror = (e) => console.error('[prism] MediaRecorder error:', e.error || e);
+    console.log('[prism] recorder ready, mimeType=', rec.mimeType);
     this.recorder = rec;
     return rec;
   }
 
-  showToast(text) {
+  showToast(text, sticky) {
     const el = this.toastEl;
     if (!el) return;
     el.textContent = text;
     el.style.opacity = '1';
     clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 3600);
+    // a confirm question stays up until answered — 3.6s isn't enough
+    // time to notice it, think, and press-to-talk a reply
+    if (!sticky) this._toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 3600);
   }
 
   // ensureRecorder() awaits getUserMedia() — the browser's own permission
@@ -343,10 +352,12 @@ class Component extends DCLogic {
       if (!this._recordingWanted) { this.pick('rest'); return false; }
       rec.__chunks = [];
       rec.start();
+      console.log('[prism] recording started, state=', rec.state);
       return true;
     } catch (e) {
+      console.error('[prism] mic access failed:', e && e.name, e && e.message, e);
       this._recordingWanted = false;
-      this.showToast(T.micError);
+      this.showToast(T.micError + ' (' + (e && e.name || 'error') + ')');
       this.pick('rest');
       return false;
     }
@@ -359,6 +370,7 @@ class Component extends DCLogic {
     this._recordingWanted = false;
     return new Promise((resolve) => {
       const rec = this.recorder;
+      console.log('[prism] stopRecordingAndSend, recorder state=', rec && rec.state);
       if (!rec || rec.state !== 'recording') {
         // released before the recorder was even ready (see startRecording) —
         // nothing to send, but never hang on "thinking" forever
@@ -366,16 +378,37 @@ class Component extends DCLogic {
         resolve();
         return;
       }
+      // A safety net: MediaRecorder SHOULD fire 'onstop' after stop(), but
+      // this is exactly the second real hang found live (2026-09-10) — no
+      // bytes ever reached the server, console clean, visualizer stuck on
+      // "thinking" forever. Whatever the underlying cause turns out to be
+      // (a flaky Bluetooth source, a browser quirk), this guarantees the
+      // turn always resolves within 4s instead of hanging indefinitely.
+      let settled = false;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const safety = setTimeout(() => {
+        console.warn('[prism] recorder.onstop never fired within 4s — aborting this turn');
+        if (this.mode === 'thinking') this.pick('rest');
+        settle();
+      }, 4000);
       rec.onstop = async () => {
+        clearTimeout(safety);
+        console.log('[prism] onstop fired, chunks=', rec.__chunks.length);
         const blob = new Blob(rec.__chunks, { type: rec.mimeType });
         const buf = await blob.arrayBuffer();
+        console.log('[prism] sending audio, bytes=', buf.byteLength, 'bridgeReady=', this.bridgeReady);
         if (buf.byteLength && this.bridgeReady) {
           this.ws.send(buf);
         } else if (this.mode === 'thinking') {
           this.pick('rest');
         }
-        resolve();
+        settle();
       };
+      console.log('[prism] calling rec.stop()');
       rec.stop();
     });
   }
