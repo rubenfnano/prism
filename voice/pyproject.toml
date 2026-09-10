@@ -1,12 +1,14 @@
 [project]
 name = "prism-voice"
 version = "0.1.0"
-description = "Motores de voz de PRISM (Whisper + Kokoro por defecto)"
+description = "Motores de voz de PRISM (Whisper + Kokoro por defecto). Este mismo entorno ejecuta tambien el puente de la Fase 4 (bridge/server.py) -- comparte proceso con la voz a proposito, para no instalar torch/whisper dos veces en dos venvs separados."
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "faster-whisper>=1.0.0",
     "kokoro>=0.9.0",
     "numpy>=1.26.0",
+    "aiohttp>=3.9.0",
+    "claude-agent-sdk>=0.2.100",
 ]
 
 [tool.setuptools]
