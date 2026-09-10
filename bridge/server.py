@@ -140,6 +140,18 @@ class Bridge:
         self._client = ClaudeSDKClient(options=options)
         await self._client.connect()
 
+        # Load the voice engines HERE, on the main thread, at boot — not
+        # lazily on first use inside run_in_executor(). Found live
+        # (2026-09-10): building Kokoro's pipeline from a worker thread
+        # hangs outright (no CPU, no network, no exception — just stuck),
+        # almost certainly a main-thread requirement somewhere in its
+        # espeak/phonemizer stack. Blocking startup once for this is a
+        # fair trade for every real turn afterward never hitting it.
+        print("[bridge] warming up voice engines...", flush=True)
+        self._stt._load()
+        self._tts._pipeline_for(self._tts._default_voice)
+        print("[bridge] voice engines ready", flush=True)
+
     async def stop(self):
         if self._client:
             await self._client.disconnect()
