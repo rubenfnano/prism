@@ -84,6 +84,7 @@ NO_TEXT_FALLBACK = (
     "la acción se haya denegado o cancelado a mitad de camino."
 )
 CONFIRM_TIMEOUT_S = 120
+SPEAK_BATCH_CHARS = 80  # synthesize roughly this many characters at a time
 WHISPER_SAMPLE_RATE = 16000
 _YES_RE = re.compile(r"^\s*(s(í|i)|claro|vale|yes|ok)\b", re.IGNORECASE)
 
@@ -376,15 +377,30 @@ class Bridge:
         await self._answer(text)
 
     async def _answer(self, text: str):
-        """Speaks and shows each sentence as soon as Claude finishes it —
-        NOT the whole reply at once. 'assistant_chunk' events append to
+        """Speaks and shows text as soon as Claude finishes each sentence
+        — NOT the whole reply at once. 'assistant_chunk' events append to
         the same chat bubble client-side; a bare 'assistant' event only
-        happens for the empty-reply fallback, a genuine one-shot message."""
+        happens for the empty-reply fallback, a genuine one-shot message.
+
+        Sentence-by-sentence TEXT, but AUDIO is batched a couple of
+        sentences at a time (SPEAK_BATCH_CHARS) — one clip per single
+        short sentence sounded choppy (found live, by Rubén,
+        2026-09-10): every clip boundary is an audible seam, and short
+        sentences meant a lot of them. Batching trades a little of the
+        latency win for noticeably smoother speech."""
         said_anything = False
+        audio_buf = ""
         async for sentence in self.ask_stream(text):
             said_anything = True
             self._emit("assistant_chunk", text=sentence)
-            audio_b64 = await self.synthesize(sentence)
+            audio_buf = f"{audio_buf} {sentence}".strip()
+            if len(audio_buf) >= SPEAK_BATCH_CHARS:
+                audio_b64 = await self.synthesize(audio_buf)
+                if audio_b64:
+                    self._emit("audio", data=audio_b64, sample_rate=self._tts.sample_rate)
+                audio_buf = ""
+        if audio_buf:
+            audio_b64 = await self.synthesize(audio_buf)
             if audio_b64:
                 self._emit("audio", data=audio_b64, sample_rate=self._tts.sample_rate)
         if not said_anything:

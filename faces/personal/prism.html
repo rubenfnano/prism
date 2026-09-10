@@ -278,9 +278,15 @@ class Component extends DCLogic {
         const res = await fetch('/events?since=' + this._lastEventId);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        if (!this.bridgeReady) {
-          this.bridgeReady = true;
-          if (this.seeded) this.sendGreet();
+        if (!this.bridgeReady) this.bridgeReady = true;
+        // greet exactly ONCE per page load — a poll can legitimately
+        // blip (a slow turn on the Pi, a moment of network hiccup) and
+        // flip bridgeReady false->true again, and re-greeting on every
+        // one of those looked like the assistant talking on its own
+        // (found live, by Rubén, 2026-09-10: "no he dicho nada")
+        if (!this._greeted && this.seeded) {
+          this._greeted = true;
+          this.sendGreet();
         }
         for (const ev of data.events) {
           this._lastEventId = Math.max(this._lastEventId, ev.id);
@@ -575,10 +581,11 @@ class Component extends DCLogic {
   // not a second, disconnected conversation.
 
   seedChat() {
-    if (this.bridgeReady) {
-      this.sendGreet();
-    } else {
+    if (!this.bridgeReady) {
       this.addMessage('assistant', T.bridgeOffline);
+    } else if (!this._greeted) {
+      this._greeted = true;
+      this.sendGreet();
     }
   }
 
