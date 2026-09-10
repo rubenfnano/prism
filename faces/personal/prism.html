@@ -318,29 +318,61 @@ class Component extends DCLogic {
     return rec;
   }
 
+  showToast(text) {
+    const el = this.toastEl;
+    if (!el) return;
+    el.textContent = text;
+    el.style.opacity = '1';
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 3600);
+  }
+
+  // ensureRecorder() awaits getUserMedia() — the browser's own permission
+  // dialog pauses the PERSON, not this code, so a hold-to-talk press can
+  // very plausibly get released (the pointer has to leave the button to
+  // click "Allow") before the recorder actually exists yet. _recordingWanted
+  // tracks that: if it's already false by the time the mic is ready, the
+  // turn was abandoned mid-flight — stop right there instead of recording
+  // into a turn nobody is waiting for.
   async startRecording() {
-    if (!this.bridgeReady) { this.addMessage('assistant', T.bridgeOffline); return false; }
+    if (!this.bridgeReady) { this.showToast(T.bridgeOffline); this.pick('rest'); return false; }
+    this._recordingWanted = true;
     try {
       const rec = await this.ensureRecorder();
+      if (!this._recordingWanted) { this.pick('rest'); return false; }
       rec.__chunks = [];
       rec.start();
       return true;
     } catch (e) {
-      this.addMessage('assistant', T.micError);
+      this._recordingWanted = false;
+      this.showToast(T.micError);
+      this.pick('rest');
       return false;
     }
   }
 
-  // Resolves once the recorded blob has actually been sent, so callers
-  // can safely move to 'thinking' right after awaiting this.
+  // Resolves once the recorded blob has actually been sent (or the turn
+  // was abandoned), so callers can safely move to 'thinking' right after
+  // awaiting this — it NEVER leaves the visualizer stuck without a way out.
   stopRecordingAndSend() {
+    this._recordingWanted = false;
     return new Promise((resolve) => {
       const rec = this.recorder;
-      if (!rec || rec.state === 'inactive') { resolve(); return; }
+      if (!rec || rec.state !== 'recording') {
+        // released before the recorder was even ready (see startRecording) —
+        // nothing to send, but never hang on "thinking" forever
+        if (this.mode === 'thinking') this.pick('rest');
+        resolve();
+        return;
+      }
       rec.onstop = async () => {
         const blob = new Blob(rec.__chunks, { type: rec.mimeType });
         const buf = await blob.arrayBuffer();
-        if (buf.byteLength && this.bridgeReady) this.ws.send(buf);
+        if (buf.byteLength && this.bridgeReady) {
+          this.ws.send(buf);
+        } else if (this.mode === 'thinking') {
+          this.pick('rest');
+        }
         resolve();
       };
       rec.stop();
