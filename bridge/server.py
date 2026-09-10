@@ -53,7 +53,6 @@ import itertools
 import json
 import re
 import sys
-import threading
 import uuid
 import wave
 from pathlib import Path
@@ -192,8 +191,6 @@ class Bridge:
         # single-user assumption as everything else here.
         self._record_stream: sd.InputStream | None = None
         self._recording_frames: list[np.ndarray] | None = None
-        self._recording_active = False
-        self._record_thread: threading.Thread | None = None
         # Synthesized clips, keyed by the 'audio' event's own id — kept
         # OUT of the polled JSON (see synthesize()/handle_audio below):
         # embedding a big base64 string in every /events response was
@@ -255,7 +252,6 @@ class Bridge:
         print("[bridge] voice engines ready", flush=True)
 
     async def stop(self):
-        self._recording_active = False
         if self._record_stream is not None:
             self._record_stream.stop()
             self._record_stream.close()
@@ -390,36 +386,28 @@ class Bridge:
         actual VAD trim once the whole clip is in hand, so this stays
         cheap and can't glitch mid-capture.
 
-        Blocking reads on a background thread, explicit blocksize —
-        matching ears.py's record_held() exactly (its own comments
-        document real Bluetooth quirks: a headset that flips between
-        listening/call modes mid-stream), not the callback-driven
-        InputStream this used before. Same library, same device, same
-        underlying PortAudio — but callback mode buffers on ITS OWN
-        schedule, which behaves differently from a plain blocking loop
-        on some backends. Switched after gain-normalized, well-leveled
-        audio still transcribed as nonsense (found live, by Rubén,
-        2026-09-10) — worth trying the exact proven shape instead of a
-        parameter tweak."""
+        Callback-driven, NOT the blocking-read-on-a-thread shape
+        ears.py's record_held() uses. That was tried (to match Jared's
+        proven reference exactly) and caused a REAL production
+        incident within minutes: a Bluetooth dropout leaves the
+        thread's blocking .read() stuck, stop_recording()'s 2s join
+        times out, and closing the stream out from under a still-
+        blocked read spun the reader in a tight loop — 333% CPU,
+        pegging the whole Pi (found live, by Rubén, 2026-09-10).
+        Reverted to this, the shape that ran the entire rest of the day
+        without incident, keeping only the explicit blocksize."""
         if self._record_stream is not None:
             return
         self._recording_frames = []
-        self._recording_active = True
+
+        def _callback(indata, frames, time_info, status):
+            self._recording_frames.append(indata[:, 0].copy())
+
         self._record_stream = sd.InputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=VAD_FRAME_SAMPLES
+            samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+            blocksize=VAD_FRAME_SAMPLES, callback=_callback,
         )
         self._record_stream.start()
-
-        def _reader():
-            while self._recording_active:
-                try:
-                    block, _ = self._record_stream.read(VAD_FRAME_SAMPLES)
-                except Exception:
-                    break
-                self._recording_frames.append(block[:, 0].copy())
-
-        self._record_thread = threading.Thread(target=_reader, daemon=True)
-        self._record_thread.start()
 
     def stop_recording(self, trim: bool = False) -> np.ndarray:
         """trim=False (push-to-talk's default) mirrors backtalk's
@@ -433,10 +421,6 @@ class Bridge:
         end of what he said kept going missing)."""
         if self._record_stream is None:
             return np.zeros(0, dtype=np.int16)
-        self._recording_active = False
-        if self._record_thread:
-            self._record_thread.join(timeout=2)
-            self._record_thread = None
         self._record_stream.stop()
         self._record_stream.close()
         self._record_stream = None
