@@ -57,7 +57,7 @@ Reúne aquí cada respuesta que falte, para que ningún paso posterior tenga que
 1. **Su nombre.** Se usa en el saludo final y en cómo se dirige a la persona durante toda la instalación.
 
 2. **La identidad del asistente** (salta esta pregunta entera si la Fase 0 ya adoptó una identidad existente). Tres caminos, en una frase cada uno:
-   - **Usar la mía tal cual** — nombre, voz y personalidad ya definidos por quien construyó PRISM.
+   - **Usar la predeterminada por Rubén — P.R.I.S.M.** — nombre, voz y personalidad ya definidos por quien construyó PRISM.
    - **La misma personalidad, con otro nombre** — se queda con el carácter pero la persona elige cómo se llama.
    - **Construir una desde cero** — la persona define nombre, tono y forma de hablar desde el principio, respondiendo unas pocas preguntas guiadas.
 
