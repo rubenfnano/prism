@@ -55,8 +55,11 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
+import os
 import re
+import signal
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -95,6 +98,12 @@ NO_TEXT_FALLBACK = (
     "la acción se haya denegado o cancelado a mitad de camino."
 )
 CONFIRM_TIMEOUT_S = 120
+# Nobody polling /events for this long means no tab has the face open —
+# stop the process rather than leaving Whisper+Kokoro+torch (~2.6GB)
+# sitting in RAM for no one. Rubén found this by hand (the browser was
+# closed, the process wasn't) and asked for it to be automatic, in code,
+# not something to remember to do (2026-09-10).
+IDLE_SHUTDOWN_S = 180
 SAMPLE_RATE = 16000
 VAD_FRAME_MS = 30
 VAD_FRAME_SAMPLES = SAMPLE_RATE * VAD_FRAME_MS // 1000  # 480
@@ -170,6 +179,9 @@ class Bridge:
         self._mode = "rest"
         self._events: list[dict] = []
         self._event_ids = itertools.count(1)
+        # last time ANY client polled /events — the idle-shutdown watcher
+        # (see watch_for_idle) uses this to know nobody has the face open
+        self.last_poll = time.monotonic()
         # ask() can legitimately be in flight while a confirm answer comes
         # in — but TWO ask() calls sharing the one persistent SDK client
         # at once would interleave their messages. This keeps turns
@@ -537,11 +549,26 @@ class Bridge:
 
 async def handle_events(request: web.Request):
     bridge: Bridge = request.app["bridge"]
+    bridge.last_poll = time.monotonic()
     since = int(request.query.get("since", 0))
     return web.json_response({
         "mode": bridge._mode,
         "events": bridge.events_since(since),
     })
+
+
+async def watch_for_idle(bridge: "Bridge"):
+    """Nobody's polled in IDLE_SHUTDOWN_S -> nobody has the face open ->
+    stop the process instead of holding ~2.6GB of models for no one.
+    SIGTERM (not a raw process.exit) so aiohttp's own signal handling
+    runs cleanup() -> Bridge.stop() first, same as a real Ctrl+C."""
+    while True:
+        await asyncio.sleep(15)
+        idle_for = time.monotonic() - bridge.last_poll
+        if idle_for > IDLE_SHUTDOWN_S:
+            print(f"[bridge] idle {idle_for:.0f}s, nobody polling — shutting down", flush=True)
+            os.kill(os.getpid(), signal.SIGTERM)
+            return
 
 
 async def handle_audio_stream(request: web.Request):
@@ -630,7 +657,16 @@ async def make_app():
     app.router.add_post("/chat", handle_chat)
     app.router.add_static("/", FACE_DIR, show_index=False)
 
+    # kept on `app` itself — an asyncio.Task with no other strong
+    # reference can be garbage-collected mid-run (a real, documented
+    # asyncio gotcha, and exactly what happened testing this: the
+    # watcher silently never fired). A local variable alone isn't
+    # enough once make_app() returns and that name goes out of scope.
+    idle_task = asyncio.create_task(watch_for_idle(bridge))
+    app["idle_task"] = idle_task
+
     async def on_cleanup(app):
+        idle_task.cancel()
         await bridge.stop()
     app.on_cleanup.append(on_cleanup)
 
