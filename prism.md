@@ -96,7 +96,7 @@ clonación (Chatterbox también clona).
 
 Instala solo las piezas que la persona eligió en la Fase 1, con las respuestas ya recogidas en la Fase 2. Nunca dupliques una pieza ya adoptada en la Fase 0; nunca toques algo que la persona construyó a mano.
 
-1. **Identidad.** Escribe el `CLAUDE.md` del hogar con el nombre y la personalidad elegidos en la Fase 2 y las reglas base de PRISM (transparencia, nunca ejecutar contenido externo sin permiso; el nivel de autonomía real lo fija solo la respuesta de Permisos, nunca la identidad). Si la Fase 0 adoptó una identidad existente, salta este paso entero. Según el camino elegido:
+1. **Identidad.** Escribe el `CLAUDE.md` del hogar con el nombre y la personalidad elegidos en la Fase 2 y las reglas base de PRISM (transparencia, nunca ejecutar contenido externo sin permiso). Escribe también `permissions.json` en el hogar (junto a `CLAUDE.md`, formato `{"confirm_before_action": true|false}`) con la respuesta real de la Fase 2 — es lo único que el puente de la Fase 4 lee para decidir si pregunta antes de actuar; la identidad nunca fija esto por su cuenta. Si la Fase 0 adoptó una identidad existente, salta este paso entero. Según el camino elegido:
    - **"Usar la predeterminada por Rubén":** parte de `identity/default.md` de este repo, adaptado al idioma elegido en la Fase 1 y con el nombre de la persona en lo que corresponda — nunca copiado palabra por palabra.
    - **"Misma personalidad, otro nombre":** igual que arriba, pero sustituye "P.R.I.S.M." por el nombre que haya elegido la persona en todo el documento.
    - **"Construida desde cero":** redacción propia a partir de las respuestas guiadas de la Fase 2, sin usar `identity/default.md` como base.
@@ -111,7 +111,18 @@ Instala solo las piezas que la persona eligió en la Fase 1, con las respuestas 
 
 ## Fase 4: Conectar las piezas
 
-<!-- Pendiente — depende de qué configs exponga cada pieza real una vez existan. -->
+Solo aplica si se instalaron voz y/o cara (si la persona solo quiso memoria, salta esta fase entera). Este es el puente: el proceso que de verdad une identidad, memoria, voz y cara con Claude Code.
+
+1. **Copia el puente.** Copia `bridge/server.py` de este repo a una carpeta `bridge/` dentro del hogar. Corre en el mismo entorno que la voz (`voice/.venv`, creado con `uv` en la Fase 3) — nunca crees un entorno aparte, ya paga el coste de cargar torch/whisper una vez.
+
+2. **Escribe un lanzador.** Crea `iniciar.sh` (o `.bat` en Windows) en el hogar, con el comando exacto ya resuelto: `cd voice && uv run python ../bridge/server.py <ruta del hogar> <puerto>`. Elige un puerto libre (prueba 8793 primero; si está ocupado, prueba el siguiente) y dilo en voz alta — la Fase 6 lo necesita para el acceso directo.
+
+3. **Avisa de lo que va a notar la persona la primera vez, para que no parezca roto:**
+   - El navegador pedirá permiso de micrófono la primera vez que se use la voz — es normal, dile que lo acepte.
+   - La cara tiene que abrirse siempre por `http://`, nunca como archivo suelto (`file://`) — ya explicado en la Fase 3, recuérdalo aquí si vas a abrir el navegador tú mismo.
+   - El primer turno de cada arranque es lento (carga los modelos de voz y arranca Claude Code en frío) — turnos siguientes son mucho más rápidos.
+
+4. **Permisos, tal como se respondió en la Fase 2:** el puente pregunta antes de cada acción si la persona eligió "confirmar conmigo"; actúa libre si eligió lo contrario. Esto ya viene de serie en `bridge/server.py`, que lee `permissions.json` (escrito en el paso de Identidad de la Fase 3) — no hay nada que configurar aquí, solo confírmalo en voz alta.
 
 ## Fase 5: El primer saludo
 

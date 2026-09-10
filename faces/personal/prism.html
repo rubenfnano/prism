@@ -71,27 +71,17 @@ const STR = {
     live: 'live', chat: 'chat', ptt: 'talk', placeholder: 'Message your assistant...',
     pttHint: 'Hold space, or the mic, to talk',
     toastHint: 'Hold the space bar to talk',
-    seedUser: "Fix the mobile menu, there's no way to navigate",
-    seedReply: 'Confirmed and fixed — added a hamburger button on mobile.',
-    replyMenu: 'Fixed — the menu had no button on mobile. Added a hamburger that opens the same links.',
-    replyDefault: 'Got it. Want me to do it now, or would you like to review it first?',
-    voiceTurns: [
-      ["What's on the roadmap?", "Voice, chat and the personal face — all sharing one transcript now."],
-      ['Fix the mobile menu, there\'s no way to navigate', 'Fixed — the menu had no button on mobile. Added a hamburger that opens the same links.'],
-    ],
+    bridgeOffline: 'The bridge (Phase 4) is not running, so I can\'t really talk yet.',
+    bridgeError: 'Something went wrong on my end',
+    micError: 'I couldn\'t get to the microphone — check the browser\'s permission for this page.',
   },
   es: {
     live: 'en vivo', chat: 'chat', ptt: 'hablar', placeholder: 'Escribe a tu asistente...',
     pttHint: 'Mantén el espacio, o el micro, para hablar',
     toastHint: 'Mantén pulsada la barra espaciadora para hablar',
-    seedUser: 'Arregla el menú móvil, no hay forma de navegar',
-    seedReply: 'Confirmado y arreglado — añadido un botón de hamburguesa en móvil.',
-    replyMenu: 'Arreglado — el menú no tenía botón en móvil. Añadí una hamburguesa que despliega los mismos enlaces.',
-    replyDefault: 'Anotado. ¿Lo hago ya, o lo revisas primero?',
-    voiceTurns: [
-      ['¿Qué tienes pendiente?', 'Voz, chat y la cara personal comparten ya una sola transcripción.'],
-      ['Arregla el menú móvil, no hay forma de navegar', 'Arreglado — el menú no tenía botón en móvil. Añadí una hamburguesa que despliega los mismos enlaces.'],
-    ],
+    bridgeOffline: 'El puente (Fase 4) no está en marcha, así que todavía no puedo hablar de verdad.',
+    bridgeError: 'Algo ha fallado por mi lado',
+    micError: 'No he podido acceder al micrófono — revisa el permiso del navegador para esta página.',
   },
 };
 const T = STR[LANG];
@@ -133,15 +123,19 @@ class Component extends DCLogic {
     this.setLiveBtn = (el) => { this.liveBtnEl = el; };
     this.setLiveBar = (el) => { this.liveBarEl = el; };
     this.liveCycle = () => {
+      if (this.uiMode !== 'live') return;
       this.pick('listening');
-      this.liveTimer = setTimeout(() => {
-        this.pick('thinking');
-        this.liveTimer = setTimeout(() => {
-          this.pick('speaking');
-          this.logVoiceTurn();
-          this.liveTimer = setTimeout(() => { if (this.uiMode === 'live') this.liveCycle(); }, 2000);
-        }, 800);
-      }, 2600);
+      this.startRecording().then((started) => {
+        if (!started || this.uiMode !== 'live') return;
+        this.liveTimer = setTimeout(async () => {
+          if (this.uiMode !== 'live') return;
+          this.pick('thinking');
+          await this.stopRecordingAndSend();
+          // whatever comes back (audio or a text-only reply) restarts the
+          // next cycle from playReply()'s "ended" handler, or from the
+          // assistant-message fallback timer below if no audio arrives.
+        }, 3500);
+      });
     };
     this.setCanvas = (el) => { this.canvasEl = el; if (el) this.boot(); };
     this.setCoreWrap = (el) => { this.coreWrapEl = el; };
@@ -164,8 +158,10 @@ class Component extends DCLogic {
       this.uiMode = next;
       clearTimeout(this.pttTimer);
       clearTimeout(this.liveTimer);
+      clearTimeout(this._liveContinueTimer);
       clearTimeout(this.chatRevealTimer);
       clearTimeout(this.chatHideTimer);
+      if (this.recorder && this.recorder.state === 'recording') this.recorder.stop();
 
       const setBtn = (btnEl, barEl, active, activeBg) => {
         if (btnEl) btnEl.style.background = active ? activeBg : 'rgba(255,255,255,0.025)';
@@ -222,8 +218,7 @@ class Component extends DCLogic {
       if (!value) return;
       this.addMessage('user', value);
       el.value = '';
-      this.pick('speaking');
-      this.respondTo(value);
+      this.sendToBridge(value);
     };
     this.handleKey = (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.sendMessage(); }
@@ -234,25 +229,20 @@ class Component extends DCLogic {
     // bar (ignored while typing in the chat box) and a real visible mic
     // button, so the gesture isn't a secret only a keyboard reveals.
     this.pttTimer = null;
-    this.voiceTurnIndex = 0;
     this.setPttBtn = (el) => { this.pttBtnEl = el; };
     this.engagePtt = (e) => {
       if (this.uiMode !== 'ptt') return;
       if (e) e.preventDefault();
-      clearTimeout(this.pttTimer);
       if (this.pttBtnEl) this.pttBtnEl.style.background = 'rgba(120,200,235,0.14)';
       this.pick('listening');
+      this.startRecording();
     };
     this.releasePtt = (e) => {
       if (this.mode !== 'listening') return;
       if (e) e.preventDefault();
       if (this.pttBtnEl) this.pttBtnEl.style.background = 'rgba(255,255,255,0.03)';
       this.pick('thinking');
-      this.pttTimer = setTimeout(() => {
-        this.pick('speaking');
-        this.logVoiceTurn();
-        this.pttTimer = setTimeout(() => this.pick('rest'), 2200);
-      }, 900);
+      this.stopRecordingAndSend();
     };
     this.onGlobalKeyDown = (e) => {
       if (e.code !== 'Space' || e.repeat) return;
@@ -268,6 +258,121 @@ class Component extends DCLogic {
     };
     window.addEventListener('keydown', this.onGlobalKeyDown);
     window.addEventListener('keyup', this.onGlobalKeyUp);
+
+    // ---- bridge (Fase 4): real connection to the assistant, replacing the
+    // canned chat above. Voice (ptt/live) still uses logVoiceTurn's demo
+    // turns for now — only typed chat is wired to the real bridge so far.
+    this.bridgeReady = false;
+    this.pendingConfirmId = null;
+    const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    this.ws = new WebSocket(wsProto + location.host + '/ws');
+    this.ws.addEventListener('open', () => {
+      this.bridgeReady = true;
+      if (this.seeded) this.ws.send(JSON.stringify({ type: 'greet' }));
+    });
+    this.ws.addEventListener('close', () => { this.bridgeReady = false; });
+    this.ws.addEventListener('message', (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg.type === 'assistant') {
+        this.addMessage('assistant', msg.text);
+        if (this.uiMode === 'live') {
+          // if audio follows, its own "ended" handler drives the next
+          // cycle and cancels this; if this reply had no audio (an empty
+          // or purely-tool-call turn), this is what keeps "live" alive
+          clearTimeout(this._liveContinueTimer);
+          this._liveContinueTimer = setTimeout(() => {
+            if (this.uiMode === 'live') this.liveCycle();
+          }, 600);
+        }
+      } else if (msg.type === 'user_transcript') {
+        // what the mic actually heard — same transcript chat/voice share
+        this.addMessage('user', msg.text);
+      } else if (msg.type === 'confirm_request') {
+        this.pendingConfirmId = msg.id;
+        this.addMessage('assistant', msg.question);
+        this.pick('rest');
+      } else if (msg.type === 'state') {
+        this.pick(msg.value);
+      } else if (msg.type === 'audio') {
+        this.playReply(msg.data);
+      } else if (msg.type === 'error') {
+        this.addMessage('assistant', T.bridgeError + ': ' + msg.text);
+        this.pick('rest');
+      }
+    });
+  }
+
+  // ---- real voice: one MediaRecorder, reused across turns. First use
+  // triggers the browser's mic-permission prompt. Whatever container the
+  // browser records (webm/opus in Chromium) travels to the bridge as a
+  // single binary WebSocket frame — the bridge decodes it, PRISM's face
+  // never needs to know the format.
+  async ensureRecorder() {
+    if (this.recorder) return this.recorder;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const rec = new MediaRecorder(stream);
+    rec.__chunks = [];
+    rec.ondataavailable = (e) => { if (e.data.size) rec.__chunks.push(e.data); };
+    this.recorder = rec;
+    return rec;
+  }
+
+  async startRecording() {
+    if (!this.bridgeReady) { this.addMessage('assistant', T.bridgeOffline); return false; }
+    try {
+      const rec = await this.ensureRecorder();
+      rec.__chunks = [];
+      rec.start();
+      return true;
+    } catch (e) {
+      this.addMessage('assistant', T.micError);
+      return false;
+    }
+  }
+
+  // Resolves once the recorded blob has actually been sent, so callers
+  // can safely move to 'thinking' right after awaiting this.
+  stopRecordingAndSend() {
+    return new Promise((resolve) => {
+      const rec = this.recorder;
+      if (!rec || rec.state === 'inactive') { resolve(); return; }
+      rec.onstop = async () => {
+        const blob = new Blob(rec.__chunks, { type: rec.mimeType });
+        const buf = await blob.arrayBuffer();
+        if (buf.byteLength && this.bridgeReady) this.ws.send(buf);
+        resolve();
+      };
+      rec.stop();
+    });
+  }
+
+  playReply(base64Wav) {
+    clearTimeout(this._liveContinueTimer);
+    this.pick('speaking');
+    const audio = new Audio('data:audio/wav;base64,' + base64Wav);
+    audio.addEventListener('ended', () => {
+      this.pick('rest');
+      if (this.uiMode === 'live') this.liveCycle();
+    });
+    audio.play().catch(() => { this.pick('rest'); });
+  }
+
+  sendToBridge(text) {
+    if (!this.bridgeReady) {
+      this.addMessage('assistant', T.bridgeOffline);
+      this.pick('rest');
+      return;
+    }
+    this.pick('thinking');
+    if (this.pendingConfirmId) {
+      const id = this.pendingConfirmId;
+      this.pendingConfirmId = null;
+      const approved = /^(s(i|í)|yes|y)\b/i.test(text.trim());
+      this.ws.send(JSON.stringify({ type: 'confirm', id, approved }));
+    } else {
+      this.ws.send(JSON.stringify({ type: 'chat', text }));
+    }
   }
 
   pick(m) {
@@ -336,40 +441,17 @@ class Component extends DCLogic {
     el.scrollTop = el.scrollHeight;
   }
 
-  respondTo(text) {
-    setTimeout(() => {
-      const lower = text.toLowerCase();
-      if (lower.includes('menu') || lower.includes('menú') || lower.includes('móvil') || lower.includes('mobile')) {
-        this.addMessage('assistant', T.replyMenu, {
-          file: 'NavBar.tsx', added: 9, removed: 1,
-          diff: '<span style="color:#767d98;">  export default function NavBar() {</span>\n' +
-                '<span style="color:#a9f2e6;">+   const [open, setOpen] = useState(false);</span>\n' +
-                '<span style="color:#767d98;">    return (</span>',
-        });
-      } else {
-        this.addMessage('assistant', T.replyDefault);
-      }
-      this.pick('rest');
-    }, 900);
-  }
-
   // Whatever is said by voice — push-to-talk or "live" — lands in the same
-  // transcript as typed chat, so switching to the chat panel mid-call shows
-  // exactly what was said, not a second, disconnected conversation.
-  logVoiceTurn() {
-    const turns = T.voiceTurns;
-    const [spoken, reply] = turns[this.voiceTurnIndex % turns.length];
-    this.voiceTurnIndex++;
-    this.addMessage('user', spoken);
-    this.addMessage('assistant', reply);
-  }
+  // transcript as typed chat (user_transcript + assistant WS messages),
+  // so switching to the chat panel mid-call shows exactly what was said,
+  // not a second, disconnected conversation.
 
   seedChat() {
-    this.addMessage('user', T.seedUser);
-    this.addMessage('assistant', T.seedReply, {
-      file: 'NavBar.tsx', added: 9, removed: 1,
-      diff: '<span style="color:#a9f2e6;">+   const [open, setOpen] = useState(false);</span>',
-    });
+    if (this.bridgeReady) {
+      this.ws.send(JSON.stringify({ type: 'greet' }));
+    } else {
+      this.addMessage('assistant', T.bridgeOffline);
+    }
   }
 
   renderVals() {
@@ -411,9 +493,12 @@ class Component extends DCLogic {
     if (this.raf) cancelAnimationFrame(this.raf);
     if (this.ro) this.ro.disconnect();
     clearTimeout(this.liveTimer);
+    clearTimeout(this._liveContinueTimer);
     window.removeEventListener('keydown', this.onGlobalKeyDown);
     window.removeEventListener('keyup', this.onGlobalKeyUp);
     clearTimeout(this.pttTimer);
+    if (this.ws) this.ws.close();
+    if (this.recorder && this.recorder.state === 'recording') this.recorder.stop();
   }
 
   // ---------- setup ----------
