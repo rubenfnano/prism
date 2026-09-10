@@ -401,7 +401,13 @@ class Component extends DCLogic {
     const nextId = this._audioQueue && this._audioQueue.shift();
     if (nextId == null) {
       this._playingAudio = false;
+      // the server's own 'state: rest' usually arrives WHILE the last
+      // queued clip is still playing (synthesis finishes before
+      // playback does) — without this, the visualizer stayed frozen on
+      // "speaking"/"thinking" once the queue actually drained (found
+      // live, by Rubén, 2026-09-10).
       if (this.uiMode === 'live' && this.mode !== 'thinking') this.liveCycle();
+      else if (this.uiMode !== 'live') this.pick('rest');
       return;
     }
     this._playingAudio = true;
