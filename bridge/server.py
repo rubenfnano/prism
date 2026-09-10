@@ -99,6 +99,27 @@ VAD_FRAME_SAMPLES = SAMPLE_RATE * VAD_FRAME_MS // 1000  # 480
 _YES_RE = re.compile(r"^\s*(s(í|i)|claro|vale|yes|ok)\b", re.IGNORECASE)
 
 
+def normalize_gain(pcm: np.ndarray, target_peak: float = 0.9) -> np.ndarray:
+    """Boosts a quiet recording up to a consistent loudness before it
+    ever reaches Whisper. The Bluetooth mic's volume swings a lot
+    between presses — peaks measured anywhere from ~11% to ~30% of full
+    scale across otherwise identical presses (found live, by Rubén,
+    2026-09-10) — and a quiet clip is a real, separate cause of bad
+    transcriptions from anything VAD-related. Never boosts an
+    already-loud clip (scale is clamped to 1.0 minimum), so this can
+    only help, never introduce clipping that wasn't there before."""
+    if pcm.size == 0:
+        return pcm
+    peak = int(np.abs(pcm).max())
+    if peak == 0:
+        return pcm
+    scale = max(1.0, (target_peak * 32767) / peak)
+    if scale == 1.0:
+        return pcm
+    boosted = pcm.astype(np.float32) * scale
+    return np.clip(boosted, -32768, 32767).astype(np.int16)
+
+
 def trim_to_speech(pcm: np.ndarray, aggressiveness: int = 2) -> np.ndarray:
     """Cuts leading/trailing silence (and drops a recording that's
     silence throughout) with webrtcvad, so Whisper only ever sees the
@@ -407,6 +428,11 @@ class Bridge:
     async def transcribe(self, pcm: np.ndarray) -> str:
         if pcm.size == 0:
             return ""
+        before = int(np.abs(pcm).max())
+        pcm = normalize_gain(pcm)
+        after = int(np.abs(pcm).max())
+        if after != before:
+            print(f"[bridge] gain boosted: peak {before} -> {after}/32768", flush=True)
         loop = asyncio.get_running_loop()
         audio_f32 = pcm.astype(np.float32) / 32768.0
         return await loop.run_in_executor(None, self._stt.transcribe, audio_f32, SAMPLE_RATE, self._language)
