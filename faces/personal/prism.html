@@ -20,41 +20,46 @@ a:hover { color: #ff7be2; }
 <div style="min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; background: radial-gradient(120% 90% at 50% 42%, #0a0d18 0%, #05060c 55%, #030409 100%); font-family: 'Chakra Petch', system-ui, sans-serif;">
   <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid rgba(120,200,235,0.1); position: relative;">
   <div style="display: inline-flex; align-items: stretch; gap: 2px; padding: 4px; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.14); border-radius: 4px;">
-    <button ref="{{ setLiveBtn }}" onClick="{{ toggleLive }}" style="appearance: none; cursor: pointer; background: rgba(255,255,255,0.025); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
+    <button ref="{{ setPttModeBtn }}" onClick="{{ setModePtt }}" style="appearance: none; cursor: pointer; background: rgba(120,200,235,0.16); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
+      <span ref="{{ setLabelPtt }}">hablar</span>
+      <span ref="{{ setPttModeBar }}" style="width: 100%; height: 2px; background: #6fe6ff; box-shadow: 0 0 8px #6fe6ff; opacity: 1;"></span>
+    </button>
+    <div style="width: 1px; align-self: center; height: 22px; background: rgba(120,200,235,0.18); margin: 0 2px;"></div>
+    <button ref="{{ setLiveBtn }}" onClick="{{ setModeLive }}" style="appearance: none; cursor: pointer; background: rgba(255,255,255,0.025); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
       <span ref="{{ setLabelLive }}">live</span>
       <span ref="{{ setLiveBar }}" style="width: 100%; height: 2px; background: #ff6f6f; box-shadow: 0 0 8px #ff6f6f; opacity: 0.12;"></span>
     </button>
     <div style="width: 1px; align-self: center; height: 22px; background: rgba(120,200,235,0.18); margin: 0 2px;"></div>
-    <button onClick="{{ toggleChat }}" style="appearance: none; cursor: pointer; background: rgba(47,243,255, calc({{ actChat }} * 0.09)); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
+    <button ref="{{ setChatModeBtn }}" onClick="{{ setModeChat }}" style="appearance: none; cursor: pointer; background: rgba(255,255,255,0.025); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
       <span ref="{{ setLabelChat }}">chat</span>
-      <span style="width: 100%; height: 2px; background: #2ff3ff; box-shadow: 0 0 8px #2ff3ff; opacity: {{ actChat }};"></span>
+      <span ref="{{ setChatBar }}" style="width: 100%; height: 2px; background: #2ff3ff; box-shadow: 0 0 8px #2ff3ff; opacity: 0.12;"></span>
     </button>
   </div>
-  <button onClick="{{ openHelp }}" title="How this works" style="position: absolute; right: 20px; appearance: none; cursor: pointer; width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.16); color: #bfd8e6; font-family: 'JetBrains Mono', monospace; font-size: 11px;">?</button>
+  <button onClick="{{ openHelp }}" title="How this works" style="position: absolute; right: 20px; appearance: none; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid rgba(120,200,235,0.35); color: #bfd8e6; font-family: 'JetBrains Mono', monospace; font-size: 14px;">?</button>
   </div>
-  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 28px 20px;">
-  <div style="position: relative; width: min(100%, 560px, 54vh); aspect-ratio: 1 / 1;">
+  <div ref="{{ setStage }}" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 28px 20px; transition: padding-bottom 0.3s ease;">
+  <div ref="{{ setCoreWrap }}" style="position: relative; width: min(100%, 560px, 54vh); aspect-ratio: 1 / 1; transition: width 0.4s ease;">
     <canvas ref="{{ setCanvas }}" style="display: block; width: 100%; height: 100%;"></canvas>
   </div>
-  <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+  <div ref="{{ setTitleBlock }}" style="display: flex; flex-direction: column; align-items: center; gap: 10px; overflow: hidden; max-height: 60px; opacity: 1; margin-top: 0px; transition: opacity 0.35s ease, max-height 0.35s ease, margin-top 0.35s ease;">
     <div style="font-size: 26px; font-weight: 300; letter-spacing: 0.46em; text-indent: 0.46em; color: #dcecf6;">PRISM</div>
-    <div ref="{{ setSubtitle }}" style="font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.34em; text-indent: 0.34em; color: rgba(150,175,200,0.55); text-transform: uppercase;">personal ai assistant</div>
+    <div ref="{{ setSubtitle }}" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.34em; text-indent: 0.34em; color: rgba(150,175,200,0.55); text-transform: uppercase;">personal ai assistant</div>
   </div>
-  <div ref="{{ setChatPanel }}" style="display: none; width: min(100%, 460px); flex-direction: column; gap: 10px; background: rgba(10,13,22,0.7); border: 1px solid rgba(120,200,235,0.16); border-radius: 4px; padding: 14px; backdrop-filter: blur(6px);">
-    <div ref="{{ setMessagesEl }}" style="display: flex; flex-direction: column; gap: 10px; max-height: 260px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.55;"></div>
+  <div ref="{{ setChatPanel }}" style="display: none; width: min(100%, 520px); flex: 1; min-height: 0; flex-direction: column; gap: 12px; opacity: 0; transition: opacity 0.25s ease;">
+    <div ref="{{ setMessagesEl }}" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; font-family: 'JetBrains Mono', monospace; font-size: 13.5px; line-height: 1.55; padding: 2px 2px;"></div>
     <div style="display: flex; gap: 8px; align-items: flex-end;">
-      <textarea ref="{{ setTextInput }}" onKeyDown="{{ handleKey }}" rows="1" placeholder="Escribe a tu asistente..." style="flex: 1; resize: none; background: rgba(255,255,255,0.03); border: 1px solid rgba(120,200,235,0.18); border-radius: 3px; color: #dcecf6; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; padding: 8px 10px; max-height: 90px; outline: none;"></textarea>
-      <button onClick="{{ sendMessage }}" style="appearance: none; cursor: pointer; background: #2ff3ff; border: none; border-radius: 3px; color: #04050a; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; padding: 9px 12px;">&#8593;</button>
+      <textarea ref="{{ setTextInput }}" onKeyDown="{{ handleKey }}" rows="1" placeholder="Escribe a tu asistente..." style="flex: 1; resize: none; background: rgba(255,255,255,0.03); border: 1px solid rgba(120,200,235,0.18); border-radius: 3px; color: #dcecf6; font-family: 'JetBrains Mono', monospace; font-size: 13.5px; padding: 8px 10px; max-height: 90px; outline: none;"></textarea>
+      <button onClick="{{ sendMessage }}" style="appearance: none; cursor: pointer; background: #2ff3ff; border: none; border-radius: 3px; color: #04050a; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; padding: 9px 12px;">&#8593;</button>
     </div>
   </div>
   </div>
-  <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 16px 20px 20px; border-top: 1px solid rgba(120,200,235,0.1);">
-    <span ref="{{ setPttHint }}" style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; color: rgba(150,175,200,0.6);"></span>
+  <div ref="{{ setFooterBar }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 16px 20px 20px; border-top: 1px solid rgba(120,200,235,0.1);">
+    <span ref="{{ setPttHint }}" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; letter-spacing: 0.08em; color: rgba(150,175,200,0.6);"></span>
     <button ref="{{ setPttBtn }}" onMouseDown="{{ engagePtt }}" onMouseUp="{{ releasePtt }}" onMouseLeave="{{ releasePtt }}" onTouchStart="{{ engagePtt }}" onTouchEnd="{{ releasePtt }}" title="Hold to talk" style="appearance: none; cursor: pointer; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.03); border: 1px solid rgba(120,200,235,0.2); color: #dcecf6; display: flex; align-items: center; justify-content: center; transition: background .12s, box-shadow .12s;">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
     </button>
   </div>
-  <div ref="{{ setToast }}" style="position: fixed; left: 50%; bottom: 108px; transform: translateX(-50%); padding: 10px 16px; background: rgba(10,13,22,0.9); border: 1px solid rgba(120,200,235,0.25); border-radius: 100px; color: #dcecf6; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.04em; opacity: 0; transition: opacity .5s; pointer-events: none;"></div>
+  <div ref="{{ setToast }}" style="position: fixed; left: 50%; bottom: 108px; transform: translateX(-50%); padding: 10px 16px; background: rgba(10,13,22,0.9); border: 1px solid rgba(120,200,235,0.25); border-radius: 100px; color: #dcecf6; font-family: 'JetBrains Mono', monospace; font-size: 13px; letter-spacing: 0.04em; opacity: 0; transition: opacity .5s; pointer-events: none;"></div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;autoCycle&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;rotationSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.45,&quot;min&quot;:0,&quot;max&quot;:1.6,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;glow&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0,&quot;max&quot;:2,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Look&quot;}}">
@@ -63,7 +68,7 @@ a:hover { color: #ff7be2; }
 const LANG = (((navigator.languages && navigator.languages[0]) || navigator.language || 'en') + '').toLowerCase().startsWith('es') ? 'es' : 'en';
 const STR = {
   en: {
-    live: 'live', chat: 'chat', placeholder: 'Message your assistant...',
+    live: 'live', chat: 'chat', ptt: 'talk', placeholder: 'Message your assistant...',
     pttHint: 'Hold space, or the mic, to talk',
     toastHint: 'Hold the space bar to talk',
     seedUser: "Fix the mobile menu, there's no way to navigate",
@@ -76,7 +81,7 @@ const STR = {
     ],
   },
   es: {
-    live: 'en vivo', chat: 'chat', placeholder: 'Escribe a tu asistente...',
+    live: 'en vivo', chat: 'chat', ptt: 'hablar', placeholder: 'Escribe a tu asistente...',
     pttHint: 'Mantén el espacio, o el micro, para hablar',
     toastHint: 'Mantén pulsada la barra espaciadora para hablar',
     seedUser: 'Arregla el menú móvil, no hay forma de navegar',
@@ -95,7 +100,7 @@ const T = STR[LANG];
 const SUBTITLE = 'Personality · Reasoning · Interface · Speech · Memory';
 
 class Component extends DCLogic {
-  state = { mode: 'rest', chatOpen: false };
+  state = { mode: 'rest' };
 
   constructor(props) {
     super(props);
@@ -103,6 +108,7 @@ class Component extends DCLogic {
     // order never matters and nothing renders untranslated even briefly.
     this.setLabelChat = (el) => { if (el) el.textContent = T.chat; };
     this.setLabelLive = (el) => { if (el) el.textContent = T.live; };
+    this.setLabelPtt = (el) => { if (el) el.textContent = T.ptt; };
     this.setSubtitle = (el) => { if (el) el.textContent = SUBTITLE; };
     this.setPttHint = (el) => { if (el) el.textContent = T.pttHint; };
     this.openHelp = () => window.open('instructions.html', '_blank', 'noopener');
@@ -119,11 +125,10 @@ class Component extends DCLogic {
       }, 500);
     };
 
-    // ---- "live" conversation: a real toggle, distinct from the manual
-    // state buttons and from `autoCycle` (that one is only an idle-demo
-    // loop). While on, it drives the same three states continuously —
-    // listen, think, speak, repeat — the way a live voice call would.
-    this.liveActive = false;
+    // ---- "live" conversation: while on, it drives the same three states
+    // continuously — listen, think, speak, repeat — the way a live voice
+    // call would. Distinct from `autoCycle` (that one is only an idle-demo
+    // loop).
     this.liveTimer = null;
     this.setLiveBtn = (el) => { this.liveBtnEl = el; };
     this.setLiveBar = (el) => { this.liveBarEl = el; };
@@ -134,37 +139,82 @@ class Component extends DCLogic {
         this.liveTimer = setTimeout(() => {
           this.pick('speaking');
           this.logVoiceTurn();
-          this.liveTimer = setTimeout(() => { if (this.liveActive) this.liveCycle(); }, 2000);
+          this.liveTimer = setTimeout(() => { if (this.uiMode === 'live') this.liveCycle(); }, 2000);
         }, 800);
       }, 2600);
     };
-    this.toggleLive = () => {
-      this.liveActive = !this.liveActive;
-      if (this.liveBtnEl) {
-        this.liveBtnEl.style.background = this.liveActive ? 'rgba(255,111,111,0.14)' : 'rgba(255,255,255,0.025)';
-      }
-      if (this.liveBarEl) this.liveBarEl.style.opacity = this.liveActive ? '1' : '0.12';
-      if (this.liveActive) {
-        clearTimeout(this.pttTimer);
-        this.liveCycle();
-      } else {
-        clearTimeout(this.liveTimer);
-        this.pick('rest');
-      }
-    };
     this.setCanvas = (el) => { this.canvasEl = el; if (el) this.boot(); };
-    this.stopLiveIfActive = () => { if (this.liveActive) this.toggleLive(); };
+    this.setCoreWrap = (el) => { this.coreWrapEl = el; };
+    this.setTitleBlock = (el) => { this.titleBlockEl = el; };
+    this.setStage = (el) => { this.stageEl = el; };
+    this.setFooterBar = (el) => { this.footerBarEl = el; };
+    this.setPttModeBtn = (el) => { this.pttModeBtnEl = el; };
+    this.setPttModeBar = (el) => { this.pttModeBarEl = el; };
+    this.setChatModeBtn = (el) => { this.chatModeBtnEl = el; };
+    this.setChatBar = (el) => { this.chatBarEl = el; };
+
+    // ---- single, mutually exclusive UI mode (ptt / live / chat). Only one
+    // of the three top-switch buttons is ever highlighted, and each mode
+    // owns the bottom control area: the push-to-talk bar only in 'ptt',
+    // the chat panel only in 'chat'. Switching mode always clears any
+    // running voice timers and returns the visualizer to rest first.
+    this.uiMode = 'ptt';
+    this.setMode = (next) => {
+      if (this.uiMode === next) return;
+      this.uiMode = next;
+      clearTimeout(this.pttTimer);
+      clearTimeout(this.liveTimer);
+      clearTimeout(this.chatRevealTimer);
+      clearTimeout(this.chatHideTimer);
+
+      const setBtn = (btnEl, barEl, active, activeBg) => {
+        if (btnEl) btnEl.style.background = active ? activeBg : 'rgba(255,255,255,0.025)';
+        if (barEl) barEl.style.opacity = active ? '1' : '0.12';
+      };
+      setBtn(this.pttModeBtnEl, this.pttModeBarEl, next === 'ptt', 'rgba(120,200,235,0.16)');
+      setBtn(this.liveBtnEl, this.liveBarEl, next === 'live', 'rgba(255,111,111,0.14)');
+      setBtn(this.chatModeBtnEl, this.chatBarEl, next === 'chat', 'rgba(47,243,255,0.09)');
+
+      if (this.footerBarEl) this.footerBarEl.style.display = next === 'ptt' ? 'flex' : 'none';
+
+      const shrink = next === 'chat';
+      if (this.coreWrapEl) this.coreWrapEl.style.width = shrink ? '90px' : 'min(100%, 560px, 54vh)';
+      if (this.titleBlockEl) {
+        this.titleBlockEl.style.opacity = shrink ? '0' : '1';
+        this.titleBlockEl.style.maxHeight = shrink ? '0px' : '60px';
+        this.titleBlockEl.style.marginTop = shrink ? '-10px' : '0px';
+      }
+      if (this.stageEl) this.stageEl.style.paddingBottom = shrink ? '36px' : '28px';
+
+      // The chat panel only claims its flex space once the core/title have
+      // finished shrinking — revealing it mid-shrink was what made the
+      // core look like it "teleported" instead of rising smoothly.
+      if (this.chatPanelEl) {
+        if (shrink) {
+          this.chatRevealTimer = setTimeout(() => {
+            if (this.uiMode !== 'chat' || !this.chatPanelEl) return;
+            this.chatPanelEl.style.display = 'flex';
+            requestAnimationFrame(() => { this.chatPanelEl.style.opacity = '1'; });
+          }, 400);
+        } else {
+          this.chatPanelEl.style.opacity = '0';
+          this.chatHideTimer = setTimeout(() => {
+            if (this.chatPanelEl) this.chatPanelEl.style.display = 'none';
+          }, 250);
+        }
+      }
+
+      if (next === 'live') this.liveCycle(); else this.pick('rest');
+    };
+    this.setModePtt = () => this.setMode('ptt');
+    this.setModeLive = () => this.setMode('live');
+    this.setModeChat = () => this.setMode('chat');
 
     // ---- chat: just a toggle + a plain-DOM message list, wired through
     // refs like the canvas already is. Doesn't touch the visualizer above.
     this.setChatPanel = (el) => { this.chatPanelEl = el; };
     this.setMessagesEl = (el) => { this.messagesEl = el; if (el && !this.seeded) { this.seeded = true; this.seedChat(); } };
     this.setTextInput = (el) => { this.textInputEl = el; if (el) el.placeholder = T.placeholder; };
-    this.toggleChat = () => {
-      const open = !this.state.chatOpen;
-      this.setState({ chatOpen: open });
-      if (this.chatPanelEl) this.chatPanelEl.style.display = open ? 'flex' : 'none';
-    };
     this.sendMessage = () => {
       const el = this.textInputEl;
       if (!el) return;
@@ -187,8 +237,8 @@ class Component extends DCLogic {
     this.voiceTurnIndex = 0;
     this.setPttBtn = (el) => { this.pttBtnEl = el; };
     this.engagePtt = (e) => {
+      if (this.uiMode !== 'ptt') return;
       if (e) e.preventDefault();
-      this.stopLiveIfActive();
       clearTimeout(this.pttTimer);
       if (this.pttBtnEl) this.pttBtnEl.style.background = 'rgba(120,200,235,0.14)';
       this.pick('listening');
@@ -227,22 +277,37 @@ class Component extends DCLogic {
     this.setState({ mode: m });
   }
 
-  // ---- chat: plain DOM, same "ver cambios" collapsible pattern as the
-  // corporate face, ported here so a code change doesn't clutter the chat.
+  // ---- chat: plain DOM, unenclosed transcript with a small avatar per
+  // message (the assistant's is the PRISM gradient, standing in for the
+  // logo), same "ver cambios" collapsible pattern as the corporate face.
   addMessage(role, text, change) {
     const el = this.messagesEl;
     if (!el) return;
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;flex-direction:column;gap:4px;' + (role === 'user' ? 'align-items:flex-end;' : 'align-items:flex-start;');
+    row.style.cssText = 'display:flex;gap:9px;max-width:88%;' +
+      (role === 'user' ? 'align-self:flex-end;flex-direction:row-reverse;' : 'align-self:flex-start;');
+
+    const avatar = document.createElement('div');
+    avatar.style.cssText = 'width:22px;height:22px;border-radius:50%;flex-shrink:0;margin-top:2px;' +
+      (role === 'user'
+        ? 'background:rgba(255,255,255,0.05);border:1px solid rgba(120,200,235,0.25);'
+        : 'background:conic-gradient(from 180deg, #2ff3ff, #8b6bff, #ff4fd8, #2ff3ff);');
+    row.appendChild(avatar);
+
+    const content = document.createElement('div');
+    content.style.cssText = 'display:flex;flex-direction:column;gap:6px;min-width:0;';
+
     const bubble = document.createElement('div');
-    bubble.style.cssText = 'max-width:88%;padding:8px 10px;border-radius:3px;color:#dcecf6;' +
-      (role === 'user' ? 'background:rgba(139,107,255,0.14);border:1px solid rgba(139,107,255,0.3);' : 'background:rgba(47,243,255,0.08);border:1px solid rgba(47,243,255,0.22);');
+    bubble.style.cssText = 'padding:9px 12px;border-radius:14px;color:#dcecf6;' +
+      (role === 'user'
+        ? 'background:rgba(139,107,255,0.14);border:1px solid rgba(139,107,255,0.3);border-top-right-radius:4px;'
+        : 'background:rgba(47,243,255,0.07);border:1px solid rgba(47,243,255,0.2);border-top-left-radius:4px;');
     bubble.textContent = text;
-    row.appendChild(bubble);
+    content.appendChild(bubble);
 
     if (change) {
       const card = document.createElement('div');
-      card.style.cssText = 'max-width:88%;border:1px solid rgba(120,200,235,0.2);border-radius:3px;overflow:hidden;background:rgba(0,0,0,0.3);';
+      card.style.cssText = 'border:1px solid rgba(120,200,235,0.2);border-radius:10px;overflow:hidden;background:rgba(0,0,0,0.3);';
       const summary = document.createElement('div');
       summary.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;user-select:none;background:rgba(255,255,255,0.03);';
       summary.innerHTML = '<span style="color:#2ff3ff;">' + change.file + '</span>' +
@@ -252,7 +317,7 @@ class Component extends DCLogic {
       const diff = document.createElement('div');
       diff.style.cssText = 'max-height:0;overflow:hidden;transition:max-height .2s ease;';
       const pre = document.createElement('pre');
-      pre.style.cssText = 'margin:0;padding:8px 10px;font-size:10.5px;line-height:1.6;white-space:pre;overflow-x:auto;';
+      pre.style.cssText = 'margin:0;padding:8px 10px;font-size:12.5px;line-height:1.6;white-space:pre;overflow-x:auto;';
       pre.innerHTML = change.diff;
       diff.appendChild(pre);
       let open = false;
@@ -263,9 +328,10 @@ class Component extends DCLogic {
       });
       card.appendChild(summary);
       card.appendChild(diff);
-      row.appendChild(card);
+      content.appendChild(card);
     }
 
+    row.appendChild(content);
     el.appendChild(row);
     el.scrollTop = el.scrollHeight;
   }
@@ -309,19 +375,28 @@ class Component extends DCLogic {
   renderVals() {
     return {
       setCanvas: this.setCanvas,
-      actChat: this.state.chatOpen ? 1 : 0.12,
+      setCoreWrap: this.setCoreWrap,
+      setTitleBlock: this.setTitleBlock,
+      setStage: this.setStage,
+      setFooterBar: this.setFooterBar,
       setChatPanel: this.setChatPanel,
       setMessagesEl: this.setMessagesEl,
       setTextInput: this.setTextInput,
-      toggleChat: this.toggleChat,
       sendMessage: this.sendMessage,
       handleKey: this.handleKey,
       setLabelChat: this.setLabelChat,
       setLabelLive: this.setLabelLive,
+      setLabelPtt: this.setLabelPtt,
       setSubtitle: this.setSubtitle,
       setLiveBtn: this.setLiveBtn,
       setLiveBar: this.setLiveBar,
-      toggleLive: this.toggleLive,
+      setPttModeBtn: this.setPttModeBtn,
+      setPttModeBar: this.setPttModeBar,
+      setChatModeBtn: this.setChatModeBtn,
+      setChatBar: this.setChatBar,
+      setModePtt: this.setModePtt,
+      setModeLive: this.setModeLive,
+      setModeChat: this.setModeChat,
       openHelp: this.openHelp,
       setPttHint: this.setPttHint,
       setPttBtn: this.setPttBtn,
