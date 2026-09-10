@@ -13,12 +13,20 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
-html, body { margin: 0; padding: 0; background: #04050a; }
+html, body { margin: 0; padding: 0; background: #04050a; overflow: hidden; }
 a { color: #6fe6ff; text-decoration: none; }
 a:hover { color: #ff7be2; }
+.prism-scroll { scrollbar-width: thin; scrollbar-color: rgba(139,107,255,0.45) transparent; }
+.prism-scroll::-webkit-scrollbar { width: 6px; }
+.prism-scroll::-webkit-scrollbar-track { background: transparent; }
+.prism-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #2ff3ff, #8b6bff, #ff4fd8);
+  border-radius: 100px;
+}
+.prism-scroll::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #6fe6ff, #a98bff, #ff7be2); }
 </style>
 </helmet>
-<div style="min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; background: radial-gradient(120% 90% at 50% 42%, #0a0d18 0%, #05060c 55%, #030409 100%); font-family: 'Chakra Petch', system-ui, sans-serif;">
+<div style="height: 100vh; height: 100dvh; overflow: hidden; box-sizing: border-box; display: flex; flex-direction: column; background: radial-gradient(120% 90% at 50% 42%, #0a0d18 0%, #05060c 55%, #030409 100%); font-family: 'Chakra Petch', system-ui, sans-serif;">
   <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid rgba(120,200,235,0.1); position: relative;">
   <div style="display: inline-flex; align-items: stretch; gap: 2px; padding: 4px; background: rgba(255,255,255,0.025); border: 1px solid rgba(120,200,235,0.14); border-radius: 4px;">
     <button ref="{{ setPttModeBtn }}" onClick="{{ setModePtt }}" style="appearance: none; cursor: pointer; background: rgba(120,200,235,0.16); border: none; border-radius: 2px; padding: 8px 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: #bfd8e6; transition: background .15s;">
@@ -38,7 +46,7 @@ a:hover { color: #ff7be2; }
   </div>
   <button onClick="{{ openHelp }}" title="How this works" style="position: absolute; right: 20px; appearance: none; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid rgba(120,200,235,0.35); color: #bfd8e6; font-family: 'JetBrains Mono', monospace; font-size: 14px;">?</button>
   </div>
-  <div ref="{{ setStage }}" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 28px 20px; transition: padding-bottom 0.3s ease;">
+  <div ref="{{ setStage }}" style="flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 28px 20px; transition: padding-bottom 0.3s ease;">
   <div ref="{{ setCoreWrap }}" style="position: relative; width: min(100%, 560px, 54vh); aspect-ratio: 1 / 1; transition: width 0.4s ease;">
     <canvas ref="{{ setCanvas }}" style="display: block; width: 100%; height: 100%;"></canvas>
   </div>
@@ -47,7 +55,7 @@ a:hover { color: #ff7be2; }
     <div ref="{{ setSubtitle }}" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.34em; text-indent: 0.34em; color: rgba(150,175,200,0.55); text-transform: uppercase;">personal ai assistant</div>
   </div>
   <div ref="{{ setChatPanel }}" style="display: none; width: min(100%, 520px); flex: 1; min-height: 0; flex-direction: column; gap: 12px; opacity: 0; transition: opacity 0.25s ease;">
-    <div ref="{{ setMessagesEl }}" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; font-family: 'JetBrains Mono', monospace; font-size: 13.5px; line-height: 1.55; padding: 2px 2px;"></div>
+    <div ref="{{ setMessagesEl }}" class="prism-scroll" style="flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 14px; font-family: 'JetBrains Mono', monospace; font-size: 13.5px; line-height: 1.55; padding: 2px 2px;"></div>
     <div style="display: flex; gap: 8px; align-items: flex-end;">
       <textarea ref="{{ setTextInput }}" onKeyDown="{{ handleKey }}" rows="1" placeholder="Escribe a tu asistente..." style="flex: 1; resize: none; background: rgba(255,255,255,0.03); border: 1px solid rgba(120,200,235,0.18); border-radius: 3px; color: #dcecf6; font-family: 'JetBrains Mono', monospace; font-size: 13.5px; padding: 8px 10px; max-height: 90px; outline: none;"></textarea>
       <button onClick="{{ sendMessage }}" style="appearance: none; cursor: pointer; background: #2ff3ff; border: none; border-radius: 3px; color: #04050a; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; padding: 9px 12px;">&#8593;</button>
@@ -540,13 +548,19 @@ class Component extends DCLogic {
   // switching to the chat panel mid-call shows exactly what was said,
   // not a second, disconnected conversation.
 
-  seedChat() {
-    if (!this.bridgeReady) {
-      this.addMessage('assistant', T.bridgeOffline);
-    } else if (!this._greeted) {
-      this._greeted = true;
-      this.sendGreet();
+  // The first poll can legitimately still be in flight when the chat
+  // panel opens (it usually resolves within ~350ms) — showing "the
+  // bridge isn't running" right away turned a normal startup moment
+  // into a permanent-looking message every single time (found live, by
+  // Rubén, 2026-09-10). Give it a couple of poll cycles before really
+  // giving up.
+  seedChat(attempt = 0) {
+    if (this.bridgeReady) {
+      if (!this._greeted) { this._greeted = true; this.sendGreet(); }
+      return;
     }
+    if (attempt < 6) { setTimeout(() => this.seedChat(attempt + 1), 200); return; }
+    this.addMessage('assistant', T.bridgeOffline);
   }
 
   renderVals() {
