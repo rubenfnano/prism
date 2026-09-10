@@ -297,6 +297,7 @@ class Component extends DCLogic {
   handleEvent(msg) {
     if (msg.type === 'assistant') {
       this.addMessage('assistant', msg.text);
+      this._openBubble = null;
       this.pendingConfirmId = null;
       if (this.toastEl) this.toastEl.style.opacity = '0';
       if (this.uiMode === 'live') {
@@ -308,20 +309,27 @@ class Component extends DCLogic {
           if (this.uiMode === 'live') this.liveCycle();
         }, 600);
       }
+    } else if (msg.type === 'assistant_chunk') {
+      // one sentence, spoken and shown as soon as Claude finishes it —
+      // appendChunk keeps a run of these in one flowing bubble
+      this.appendChunk(msg.text);
     } else if (msg.type === 'user_transcript') {
       // what the mic actually heard — same transcript chat/voice share
       this.addMessage('user', msg.text);
+      this._openBubble = null;
     } else if (msg.type === 'confirm_request') {
-      this.pendingConfirmId = msg.id;
+      this.pendingConfirmId = msg.confirm_id;
       this.addMessage('assistant', msg.question);
+      this._openBubble = null;
       // visible in EVERY mode, not just chat — a voice turn while this
       // is up answers it directly now (see server: voice_turn)
       this.showToast(msg.question, true);
       this.pick('rest');
     } else if (msg.type === 'state') {
       this.pick(msg.value);
+      if (msg.value === 'rest') this._openBubble = null;
     } else if (msg.type === 'audio') {
-      this.playReply(msg.data);
+      this.queueAudio(msg.data);
     } else if (msg.type === 'error') {
       console.error('[prism] bridge error:', msg.text);
       this.addMessage('assistant', T.bridgeError + ': ' + msg.text);
@@ -443,15 +451,28 @@ class Component extends DCLogic {
     });
   }
 
-  playReply(base64Wav) {
+  // Sentences arrive (and finish synthesizing) one at a time now, not as
+  // a single clip for the whole reply — queued and played back to back,
+  // so a later sentence never interrupts one still playing.
+  queueAudio(base64Wav) {
     clearTimeout(this._liveContinueTimer);
+    if (!this._audioQueue) this._audioQueue = [];
+    this._audioQueue.push(base64Wav);
+    if (!this._playingAudio) this._playNextAudio();
+  }
+
+  _playNextAudio() {
+    const next = this._audioQueue && this._audioQueue.shift();
+    if (!next) {
+      this._playingAudio = false;
+      if (this.uiMode === 'live' && this.mode !== 'thinking') this.liveCycle();
+      return;
+    }
+    this._playingAudio = true;
     this.pick('speaking');
-    const audio = new Audio('data:audio/wav;base64,' + base64Wav);
-    audio.addEventListener('ended', () => {
-      this.pick('rest');
-      if (this.uiMode === 'live') this.liveCycle();
-    });
-    audio.play().catch(() => { this.pick('rest'); });
+    const audio = new Audio('data:audio/wav;base64,' + next);
+    audio.addEventListener('ended', () => this._playNextAudio());
+    audio.play().catch(() => this._playNextAudio());
   }
 
   sendToBridge(text) {
@@ -532,6 +553,20 @@ class Component extends DCLogic {
     row.appendChild(content);
     el.appendChild(row);
     el.scrollTop = el.scrollHeight;
+    return bubble;
+  }
+
+  // ---- streamed replies: each sentence arrives (and is spoken) as soon
+  // as Claude finishes it, not after the whole reply — appendChunk keeps
+  // them in ONE flowing bubble instead of a new bubble per sentence.
+  // openAssistantBubble() clears whenever a new turn starts.
+  appendChunk(text) {
+    if (this._openBubble) {
+      this._openBubble.textContent += ' ' + text;
+    } else {
+      this._openBubble = this.addMessage('assistant', text);
+    }
+    if (this.messagesEl) this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
   }
 
   // Whatever is said by voice — push-to-talk or "live" — lands in the same

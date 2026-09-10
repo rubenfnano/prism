@@ -180,6 +180,10 @@ class Bridge:
             system_prompt={"type": "preset", "preset": "claude_code"},
             permission_mode="default",
             can_use_tool=self._gate,
+            # StreamEvent deltas, not just complete messages -- needed to
+            # speak sentence-by-sentence as they're generated instead of
+            # waiting for the whole reply (see ask_stream()).
+            include_partial_messages=True,
         )
         self._client = ClaudeSDKClient(options=options)
         await self._client.connect()
@@ -268,29 +272,57 @@ class Bridge:
         if fut and not fut.done():
             fut.set_result(approved)
 
-    async def ask(self, text: str) -> str:
-        """One full turn with Claude Code. If the turn ends without any
-        text block — a denied/timed-out confirmation with nothing left
-        to say, or a tool-only reply — NO_TEXT_FALLBACK explains that
-        honestly instead of a bare, confusing "..."."""
+    async def ask_stream(self, text: str):
+        """Yields each sentence AS SOON AS Claude finishes it, instead of
+        the whole reply at once — the fix for the ~1-minute turnaround
+        Rubén found (2026-09-10): waiting for the full reply, then
+        synthesizing the full reply, then sending it, means every one of
+        those steps' latency stacks up in series. Streaming sentence by
+        sentence means synthesis of sentence 1 starts while Claude is
+        still writing sentence 2 — the same technique backtalk uses
+        (brain.py's ask_stream), rebuilt here from scratch against the
+        same public SDK, no code shared."""
         self.set_mode("thinking")
+        sentence_end = re.compile(r"(?<=[.!?])\s")
         async with self._turn_lock:
             await self._client.query(text)
-            pieces = []
+            buf = ""
+            spoke_yet = False
             async for msg in self._client.receive_response():
                 t = type(msg).__name__
-                if t == "AssistantMessage":
-                    for block in getattr(msg, "content", []) or []:
-                        txt = getattr(block, "text", None)
-                        if txt:
-                            pieces.append(txt)
+                if t == "StreamEvent":
+                    ev = getattr(msg, "event", {}) or {}
+                    if ev.get("type") == "content_block_delta":
+                        delta = ev.get("delta", {}) or {}
+                        if delta.get("type") == "text_delta":
+                            buf += delta.get("text", "")
+                            while True:
+                                m = sentence_end.search(buf)
+                                if not m:
+                                    break
+                                sentence, buf = buf[:m.end()].strip(), buf[m.end():]
+                                if sentence:
+                                    if not spoke_yet:
+                                        self.set_mode("speaking")
+                                        spoke_yet = True
+                                    yield sentence
+                    elif ev.get("type") == "content_block_stop":
+                        tail = buf.strip()
+                        buf = ""
+                        if tail:
+                            if not spoke_yet:
+                                self.set_mode("speaking")
+                                spoke_yet = True
+                            yield tail
                 elif t == "ResultMessage":
                     if getattr(msg, "is_error", False):
                         print(f"[bridge] turn ended with error: {msg!r:.300}", flush=True)
                     break
-        self.set_mode("speaking")
-        reply = "".join(pieces).strip() or NO_TEXT_FALLBACK
-        return reply
+            tail = buf.strip()
+            if tail:
+                if not spoke_yet:
+                    self.set_mode("speaking")
+                yield tail
 
     async def transcribe(self, audio_bytes: bytes) -> str:
         loop = asyncio.get_running_loop()
@@ -344,13 +376,20 @@ class Bridge:
         await self._answer(text)
 
     async def _answer(self, text: str):
-        reply = await self.ask(text)
-        self._emit("assistant", text=reply)
-        audio_b64 = await self.synthesize(reply)
-        if audio_b64:
-            self._emit("audio", data=audio_b64, sample_rate=self._tts.sample_rate)
-        else:
-            self.set_mode("rest")
+        """Speaks and shows each sentence as soon as Claude finishes it —
+        NOT the whole reply at once. 'assistant_chunk' events append to
+        the same chat bubble client-side; a bare 'assistant' event only
+        happens for the empty-reply fallback, a genuine one-shot message."""
+        said_anything = False
+        async for sentence in self.ask_stream(text):
+            said_anything = True
+            self._emit("assistant_chunk", text=sentence)
+            audio_b64 = await self.synthesize(sentence)
+            if audio_b64:
+                self._emit("audio", data=audio_b64, sample_rate=self._tts.sample_rate)
+        if not said_anything:
+            self._emit("assistant", text=NO_TEXT_FALLBACK)
+        self.set_mode("rest")
 
 
 async def handle_events(request: web.Request):
