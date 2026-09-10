@@ -130,7 +130,13 @@ class Bridge:
         self.home_dir = home_dir
         self._client: ClaudeSDKClient | None = None
         self._pending_confirms: dict[str, asyncio.Future] = {}
-        self._awaiting_confirm_id: str | None = None
+        # FIFO, not a single id: Claude can (and does, every session
+        # start, per CLAUDE.md's "read the vault index, then the latest
+        # daily note") fire two tool calls in parallel, each hitting the
+        # gate before either is answered. A single scalar here silently
+        # lost the first one, found live (2026-09-10) when a "sí" only
+        # ever resolved whichever question arrived last.
+        self._confirm_queue: list[str] = []
         self._mode = "rest"
         self._events: list[dict] = []
         self._event_ids = itertools.count(1)
@@ -197,6 +203,12 @@ class Bridge:
         self._mode = mode
         self._emit("state", value=mode)
 
+    @property
+    def awaiting_confirm_id(self) -> str | None:
+        """The OLDEST unanswered confirmation, if any — answers resolve
+        in the order the questions were asked."""
+        return self._confirm_queue[0] if self._confirm_queue else None
+
     async def _gate(self, tool, tool_input, ctx):
         """Every tool use passes through here. Whether it actually stops
         to ask depends on the Fase 2 Permisos answer (permissions.json) —
@@ -208,7 +220,7 @@ class Bridge:
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
         self._pending_confirms[confirm_id] = fut
-        self._awaiting_confirm_id = confirm_id
+        self._confirm_queue.append(confirm_id)
         what = f"usar {tool}"
         if isinstance(tool_input, dict) and tool_input.get("command"):
             what = f"ejecutar: {tool_input['command'][:200]}"
@@ -223,8 +235,8 @@ class Bridge:
             approved = await asyncio.wait_for(fut, CONFIRM_TIMEOUT_S)
         except asyncio.TimeoutError:
             self._pending_confirms.pop(confirm_id, None)
-            if self._awaiting_confirm_id == confirm_id:
-                self._awaiting_confirm_id = None
+            if confirm_id in self._confirm_queue:
+                self._confirm_queue.remove(confirm_id)
             return PermissionResultDeny(
                 behavior="deny",
                 message="No hubo respuesta a tiempo; la acción no se aprobó.",
@@ -235,8 +247,8 @@ class Bridge:
         return PermissionResultDeny(behavior="deny", message="Denegado por la persona.", interrupt=False)
 
     def resolve_confirm(self, confirm_id: str, approved: bool):
-        if self._awaiting_confirm_id == confirm_id:
-            self._awaiting_confirm_id = None
+        if confirm_id in self._confirm_queue:
+            self._confirm_queue.remove(confirm_id)
         fut = self._pending_confirms.pop(confirm_id, None)
         if fut and not fut.done():
             fut.set_result(approved)
@@ -294,8 +306,8 @@ class Bridge:
         self.set_mode("thinking")
         transcript = await self.transcribe(audio_bytes)
 
-        if self._awaiting_confirm_id:
-            confirm_id = self._awaiting_confirm_id
+        if self.awaiting_confirm_id:
+            confirm_id = self.awaiting_confirm_id
             approved = bool(_YES_RE.match(transcript.strip())) if transcript else False
             self._emit("user_transcript", text=transcript or "(sin entender)")
             self.resolve_confirm(confirm_id, approved)
@@ -309,8 +321,8 @@ class Bridge:
         await self._answer(transcript)
 
     async def chat_turn(self, text: str):
-        if self._awaiting_confirm_id:
-            confirm_id = self._awaiting_confirm_id
+        if self.awaiting_confirm_id:
+            confirm_id = self.awaiting_confirm_id
             approved = bool(_YES_RE.match(text.strip()))
             self.resolve_confirm(confirm_id, approved)
             return
